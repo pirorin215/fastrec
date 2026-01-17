@@ -1,0 +1,353 @@
+#include "fastrec_alt.h"
+#include <stdarg.h>
+
+void applog(const char *format, ...) {
+    // Static mutex for thread-safe logging (created only once)
+    static SemaphoreHandle_t log_mutex = NULL;
+    if (log_mutex == NULL) {
+        log_mutex = xSemaphoreCreateMutex();
+        if (log_mutex == NULL) {
+            // If mutex creation fails, output to Serial only
+            Serial.println("ERROR: Failed to create log mutex");
+            return;
+        }
+    }
+
+    // formatが"ERROR:"で始まる場合は、g_enable_loggingがfalseでもログを出力する
+    if (!g_enable_logging && strncmp(format, "ERROR:", 6) != 0) {
+        return;
+    }
+
+    // Acquire mutex with timeout to prevent deadlock
+    if (xSemaphoreTake(log_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        // Timeout - skip logging to avoid blocking
+        return;
+    }
+
+    // Use fixed-size stack buffer instead of malloc (prevents heap fragmentation)
+    char buffer[256];
+    int offset = 0;
+
+    // Add timestamp
+    struct tm timeinfo;
+    if (getValidRtcTime(&timeinfo)) {
+        offset = strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S ", &timeinfo);
+    } else {
+        offset = snprintf(buffer, sizeof(buffer), "[<no time>] ");
+    }
+
+    // Format the log message
+    va_list arg;
+    va_start(arg, format);
+    int written = vsnprintf(buffer + offset, sizeof(buffer) - offset, format, arg);
+    va_end(arg);
+
+    // Handle buffer overflow
+    if (written < 0) {
+        // Error occurred during formatting
+        snprintf(buffer + offset, sizeof(buffer) - offset, "[LOG ERROR]");
+    } else if (written >= (int)(sizeof(buffer) - offset)) {
+        // Message was truncated - add "..." at the end
+        buffer[sizeof(buffer) - 4] = '.';
+        buffer[sizeof(buffer) - 3] = '.';
+        buffer[sizeof(buffer) - 2] = '.';
+        buffer[sizeof(buffer) - 1] = '\0';
+    }
+
+    // Output to Serial
+    Serial.println(buffer);
+
+    // Write to log file
+    File logFile = LittleFS.open(LOG_FILE_0, FILE_APPEND);
+    if (logFile) {
+        logFile.println(buffer);
+        logFile.close();
+    }
+
+    // Release mutex
+    xSemaphoreGive(log_mutex);
+}
+
+void rotateLogs() {
+  File logFile = LittleFS.open(LOG_FILE_0, FILE_READ);
+  if (logFile) {
+    if (logFile.size() > MAX_LOG_SIZE) {
+      logFile.close();
+      if (LittleFS.exists(LOG_FILE_1)) {
+        LittleFS.remove(LOG_FILE_1);
+      }
+      LittleFS.rename(LOG_FILE_0, LOG_FILE_1);
+    } else {
+      logFile.close();
+    }
+  }
+}
+
+void onboard_led(bool bOn) {
+  // LOWで点灯、HIGHで消灯で紛らわしいので関数化してる
+  applog("onboard_led %d", bOn);
+  if (bOn) {
+    digitalWrite(LED_BUILTIN, LOW);
+  } else {
+    digitalWrite(LED_BUILTIN, HIGH);
+  }
+}
+
+bool checkFreeSpace() {
+  unsigned long totalBytes = LittleFS.totalBytes();
+  unsigned long usedBytes = LittleFS.usedBytes();
+  unsigned long freeBytes = totalBytes - usedBytes;
+  unsigned long minFreeBytes = MIN_FREE_SPACE_MB * 1024 * 1024;  // Convert MB to bytes
+
+  applog("LittleFS: Total %lu bytes, Used %lu bytes, Free %lu bytes.", totalBytes, usedBytes, freeBytes);
+
+  if (freeBytes < minFreeBytes) {
+    applog("ERROR: Not enough free space on LittleFS. Required: %lu bytes, Available: %lu bytes.", minFreeBytes, freeBytes);
+    return false;
+  }
+  return true;
+}
+
+void setRtcToDefaultTime() {
+  applog("Setting RTC to default time: 2025/01/01 00:00:00");
+  struct tm defaultTime;
+  defaultTime.tm_year = 2025 - 1900;  // Year since 1900
+  defaultTime.tm_mon = 0;             // Month (0-11, so Jan is 0)
+  defaultTime.tm_mday = 1;            // Day of the month (1-31)
+  defaultTime.tm_hour = 0;            // Hour (0-23)
+  defaultTime.tm_min = 0;             // Minute (0-59)
+  defaultTime.tm_sec = 0;             // Second (0-59)
+  defaultTime.tm_isdst = -1;          // Daylight Saving Time flag (-1 means unknown)
+
+  time_t t = mktime(&defaultTime);
+  struct timeval now = { .tv_sec = t };
+  settimeofday(&now, NULL);
+  applog("RTC set to default time.");
+}
+
+// Function to generate a filename based on RTC time
+void generateFilenameFromRTC(char* filenameBuffer, size_t bufferSize) {
+  struct tm timeinfo;
+
+  applog("Getting time from internal RTC for initial filename...");
+  if (getValidRtcTime(&timeinfo)) {
+    char time_buf[64];
+    strftime(time_buf, sizeof(time_buf), "%A, %B %d %Y %H:%M:%S", &timeinfo);
+    applog("Current time from RTC: %s", time_buf);
+    strftime(filenameBuffer, bufferSize, "/R%Y-%m-%d-%H-%M-%S.wav", &timeinfo);
+    applog("Generated filename (RTC): %s", filenameBuffer);
+  }
+}
+
+bool isConnectUSB() {
+  return digitalRead(USB_DETECT_PIN) == HIGH;
+}
+
+// Helper function to get time from internal RTC and check its validity.
+bool getValidRtcTime(struct tm* timeinfo) {
+  time_t current_epoch_time;
+  if (time(&current_epoch_time) != (time_t)-1) {
+    // Convert corrected epoch time to tm struct (using gmtime_r for UTC, common for RTC)
+    if (localtime_r(&current_epoch_time, timeinfo)) {
+      if (timeinfo->tm_year > (2000 - 1900)) {  // Check if year is after 2000 (epoch is 1970)
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Helper function to get formatted RTC time string.
+bool getFormattedRtcTime(char* buffer, size_t bufferSize) {
+  struct tm timeinfo;
+  if (getValidRtcTime(&timeinfo)) {
+    strftime(buffer, bufferSize, "%m/%d %k:%M:%S", &timeinfo);
+    return true;
+  } else {
+    strncpy(buffer, "RTC Not Set", bufferSize);
+    buffer[bufferSize - 1] = '\0';  // Ensure null-termination
+    return false;
+  }
+}
+
+float getLittleFSUsagePercentage() {
+  unsigned long totalBytes = LittleFS.totalBytes();
+  unsigned long usedBytes = LittleFS.usedBytes();
+  return (float)usedBytes / totalBytes * 100.0f;
+}
+
+void initLittleFS() {
+  applog("init LittleFS...");
+  if (!LittleFS.begin()) {
+    applog("Formatting LittleFS...");
+    LittleFS.format();
+    if (!LittleFS.begin()) {
+      applog("Failed to mount LittleFS!");
+      while (1)
+        ;  // do nothing
+    }
+  }
+  applog("LittleFS init.");
+
+  rotateLogs();
+
+  float usagePercentage = getLittleFSUsagePercentage();
+
+  unsigned long totalBytes = LittleFS.totalBytes();
+  unsigned long usedBytes = LittleFS.usedBytes();
+  unsigned long freeBytes = totalBytes - usedBytes;
+
+  applog("LittleFS: Total %lu bytes, Used %lu bytes, Free %lu bytes (%.2f%% used).", totalBytes, usedBytes, freeBytes, usagePercentage);
+
+  g_audioFileCount = countAudioFiles();  // Call the new function to update file counts
+}
+
+float getBatteryVoltage() {
+  int analogValue = analogRead(BATTERY_DIV_PIN);
+  float voltage = analogValue * (3.3 / 4095.0); //(0-4095 maps to 0-3.3V with ADC_11db)
+  return voltage * BAT_VOL_MULT; // Return raw voltage without updating global
+}
+
+void updateBatteryVoltageTracking() {
+  if (millis() - g_lastVoltageSampleTime >= 1000) {
+    float rawVoltage = getBatteryVoltage();
+
+    // Add to ring buffer
+    g_voltageHistory[g_voltageHistoryIndex] = rawVoltage;
+    g_voltageHistoryIndex = (g_voltageHistoryIndex + 1) % VOLTAGE_HISTORY_SIZE;
+
+    // Find maximum value in the last n samples
+    float maxVoltage = 0.0f;
+    for (int i = 0; i < VOLTAGE_HISTORY_SIZE; i++) {
+      if (g_voltageHistory[i] > maxVoltage) {
+        maxVoltage = g_voltageHistory[i];
+      }
+    }
+
+    g_currentBatteryVoltage = maxVoltage;
+    g_lastVoltageSampleTime = millis();
+  }
+}
+
+// Function to count audio files and return the count. Updates the global audioFileCount at call site.
+int countAudioFiles() {
+  int currentAudioFileCount = 0;
+
+  File root = LittleFS.open("/", "r");
+  if (!root) {
+    applog("Failed to open root directory to count audio files.");
+    return 0;
+  }
+
+  File file = root.openNextFile();
+  while (file) {
+    if (!file.isDirectory()) {
+      const char* filenameCStr = file.name();
+      if (strlen(filenameCStr) >= 4 && strcmp(filenameCStr + strlen(filenameCStr) - 4, ".wav") == 0) {
+        currentAudioFileCount++;
+      }
+    }
+    file = root.openNextFile();
+  }
+  root.close();
+  //applog("LittleFS contains %d audio files.", currentAudioFileCount);
+  return currentAudioFileCount;
+}
+
+// Helper function to parse filename into a tm struct
+bool parseFilenameToTm(const char* filename, struct tm* timeinfo) {
+  // Expected format: RYYYY-MM-DD-HH-MM-SS.wav (or /RYYYY-MM-DD-HH-MM-SS.wav if full path)
+  // Skip the leading 'R' (or '/' and 'R' if full path)
+  const char* effective_filename = filename;
+  if (filename[0] == '/') { // Handle full path case
+    effective_filename = filename + 1;
+  }
+
+  if (strlen(effective_filename) < 19 || effective_filename[0] != 'R') { // R + YYYY-MM-DD-HH-MM-SS.wav (19 chars)
+    return false; // Invalid format
+  }
+  const char* date_time_str = effective_filename + 1; // Point to YYYY-MM-DD-HH-MM-SS.wav
+
+  // Use sscanf to parse the components
+  int year, month, day, hour, minute, second;
+  if (sscanf(date_time_str, "%d-%d-%d-%d-%d-%d.wav",
+             &year, &month, &day, &hour, &minute, &second) == 6) {
+    timeinfo->tm_year = year - 1900;
+    timeinfo->tm_mon = month - 1; // tm_mon is 0-11
+    timeinfo->tm_mday = day;
+    timeinfo->tm_hour = hour;
+    timeinfo->tm_min = minute;
+    timeinfo->tm_sec = second;
+    timeinfo->tm_isdst = -1; // Not known
+    return true;
+  }
+  return false;
+}
+
+// sorted array, maintaining maxFiles limit
+int sortedFilenames(char sortedArray[][MAX_FILENAME_LENGTH], int currentCount, int maxLimit, const char* newFilename, bool ascending) {
+  int insertIndex = -1;
+
+  // Find the correct position to insert the newFilename, maintaining sorted order
+  for (int i = 0; i < currentCount; ++i) {
+    if ((ascending && strcmp(newFilename, sortedArray[i]) < 0) || (!ascending && strcmp(newFilename, sortedArray[i]) > 0)) {
+      insertIndex = i;
+      break;
+    }
+  }
+
+  if (insertIndex == -1 && currentCount < maxLimit) {
+    // If newFilename is older/newer than all existing files but there's still space
+    insertIndex = currentCount;
+  } else if (insertIndex == -1 && currentCount == maxLimit) {
+    // If newFilename is older/newer than all existing files and no space, skip
+    return currentCount; // No change in count
+  }
+
+  if (insertIndex != -1) {
+    // Shift elements to make space for the new file
+    // If we are at maxLimit, the last element will be dropped
+    for (int i = (currentCount < maxLimit ? currentCount : maxLimit - 1); i > insertIndex; --i) {
+      strncpy(sortedArray[i], sortedArray[i - 1], MAX_FILENAME_LENGTH);
+      sortedArray[i][MAX_FILENAME_LENGTH - 1] = '\0';
+    }
+    strncpy(sortedArray[insertIndex], newFilename, MAX_FILENAME_LENGTH);
+    sortedArray[insertIndex][MAX_FILENAME_LENGTH - 1] = '\0';
+    if (currentCount < maxLimit) {
+      currentCount++;
+    }
+  }
+  return currentCount;
+}
+
+int getLatestAudioFilenames(char outputArray[][MAX_FILENAME_LENGTH], int maxFiles, bool ascending) {
+  char tempFiles[maxFiles][MAX_FILENAME_LENGTH];
+  int currentFileCount = 0;
+
+  for (int i = 0; i < maxFiles; ++i) {
+    tempFiles[i][0] = '\0'; // Initialize filenames to empty string
+  }
+
+  File root = LittleFS.open("/", "r");
+  if (!root) {
+    applog("Failed to open directory");
+    return 0;
+  }
+
+  File file = root.openNextFile();
+  while (file) {
+    if (!file.isDirectory() && strstr(file.name(), ".wav") != nullptr) {
+      const char* filenameCStr = file.name();
+      currentFileCount = sortedFilenames(tempFiles, currentFileCount, maxFiles, filenameCStr, ascending);
+    }
+    file = root.openNextFile();
+  }
+  root.close();
+
+  for (int i = 0; i < currentFileCount; ++i) {
+    strncpy(outputArray[i], tempFiles[i], MAX_FILENAME_LENGTH);
+    outputArray[i][MAX_FILENAME_LENGTH - 1] = '\0';
+  }
+
+  return currentFileCount;
+}

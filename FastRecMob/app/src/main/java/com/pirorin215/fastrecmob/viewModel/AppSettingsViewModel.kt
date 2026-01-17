@@ -1,0 +1,288 @@
+package com.pirorin215.fastrecmob.viewModel
+
+import android.app.Application
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.pirorin215.fastrecmob.data.AppSettingsRepository
+import com.pirorin215.fastrecmob.data.Settings
+import com.pirorin215.fastrecmob.service.SpeechToTextService
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.SharingStarted // Add this import
+import kotlinx.coroutines.flow.stateIn // Add this import
+import com.pirorin215.fastrecmob.data.ThemeMode // Add this import
+
+enum class ApiKeyStatus {
+    VALID,
+    INVALID,
+    EMPTY,
+    CHECKING,
+    UNKNOWN_ERROR
+}
+
+class AppSettingsViewModel(
+    private val appSettingsRepository: AppSettingsRepository,
+    private val transcriptionManager: TranscriptionManager, // Added
+    private val application: Application
+) : ViewModel() {
+
+    private val _apiKeyStatus = MutableStateFlow(ApiKeyStatus.CHECKING)
+    val apiKeyStatus: StateFlow<ApiKeyStatus> = _apiKeyStatus.asStateFlow()
+
+    val apiKey: StateFlow<String> = appSettingsRepository.getFlow(Settings.API_KEY)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ""
+        )
+
+    val transcriptionCacheLimit: StateFlow<Int> = appSettingsRepository.getFlow(Settings.TRANSCRIPTION_CACHE_LIMIT)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 100 // Default to 100 files
+        )
+
+    val transcriptionFontSize: StateFlow<Int> = appSettingsRepository.getFlow(Settings.TRANSCRIPTION_FONT_SIZE)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 14 // Default to 14
+        )
+
+    val themeMode: StateFlow<ThemeMode> = appSettingsRepository.getFlow(Settings.THEME_MODE)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ThemeMode.SYSTEM // Default to SYSTEM
+        )
+
+    val googleTodoListName: StateFlow<String> = appSettingsRepository.getFlow(Settings.GOOGLE_TODO_LIST_NAME)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = "fastrec"
+        )
+
+    val googleTaskTitleLength: StateFlow<Int> = appSettingsRepository.getFlow(Settings.GOOGLE_TASK_TITLE_LENGTH)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 20 // Default to 20
+        )
+
+    val googleTasksSyncIntervalMinutes: StateFlow<Int> = appSettingsRepository.getFlow(Settings.GOOGLE_TASKS_SYNC_INTERVAL_MINUTES)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 5 // Default to 5 minutes
+        )
+
+    val showCompletedGoogleTasks: StateFlow<Boolean> = appSettingsRepository.getFlow(Settings.SHOW_COMPLETED_GOOGLE_TASKS)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false
+        )
+
+    val autoStartOnBoot: StateFlow<Boolean> = appSettingsRepository.getFlow(Settings.AUTO_START_ON_BOOT)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false
+        )
+
+    val chunkBurstSize: StateFlow<Int> = appSettingsRepository.getFlow(Settings.CHUNK_BURST_SIZE)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 8 // Default to 8
+        )
+
+    val voltageRetryCount: StateFlow<Int> = appSettingsRepository.getFlow(Settings.VOLTAGE_RETRY_COUNT)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 3 // Default to 3
+        )
+
+    val voltageAcquisitionInterval: StateFlow<Int> = appSettingsRepository.getFlow(Settings.VOLTAGE_ACQUISITION_INTERVAL)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 100 // Default to 100ms
+        )
+
+    val lowVoltageThreshold: StateFlow<Float> = appSettingsRepository.getFlow(Settings.LOW_VOLTAGE_THRESHOLD)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 3.61f // Default to 3.61V
+        )
+
+    val lowVoltageNotifyEveryTime: StateFlow<Boolean> = appSettingsRepository.getFlow(Settings.LOW_VOLTAGE_NOTIFY_EVERY_TIME)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false // Default to first time only
+        )
+
+    val transcriptionNotificationEnabled: StateFlow<Boolean> = appSettingsRepository.getFlow(Settings.TRANSCRIPTION_NOTIFICATION_ENABLED)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false // Default to OFF
+        )
+
+    fun saveApiKey(apiKey: String) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.API_KEY, apiKey)
+        }
+    }
+
+    fun saveTranscriptionCacheLimit(limit: Int) {
+        viewModelScope.launch {
+            val cacheLimit = if (limit < 1) 1 else limit
+            appSettingsRepository.setValue(Settings.TRANSCRIPTION_CACHE_LIMIT, cacheLimit)
+        }
+    }
+
+    fun saveTranscriptionFontSize(size: Int) {
+        viewModelScope.launch {
+            val fontSize = size.coerceIn(10, 24)
+            appSettingsRepository.setValue(Settings.TRANSCRIPTION_FONT_SIZE, fontSize)
+        }
+    }
+
+    fun saveThemeMode(themeMode: ThemeMode) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.THEME_MODE, themeMode)
+        }
+    }
+
+    fun saveGoogleTodoListName(name: String) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.GOOGLE_TODO_LIST_NAME, name)
+        }
+    }
+
+    fun saveGoogleTaskTitleLength(length: Int) {
+        viewModelScope.launch {
+            val titleLength = length.coerceIn(5, 50) // Example bounds: 5 to 50 characters
+            appSettingsRepository.setValue(Settings.GOOGLE_TASK_TITLE_LENGTH, titleLength)
+        }
+    }
+
+    fun saveGoogleTasksSyncIntervalMinutes(minutes: Int) {
+        viewModelScope.launch {
+            val interval = minutes.coerceAtLeast(1) // Ensure at least 1 minute
+            appSettingsRepository.setValue(Settings.GOOGLE_TASKS_SYNC_INTERVAL_MINUTES, interval)
+        }
+    }
+
+    fun saveShowCompletedGoogleTasks(show: Boolean) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.SHOW_COMPLETED_GOOGLE_TASKS, show)
+        }
+    }
+
+    fun saveAutoStartOnBoot(enable: Boolean) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.AUTO_START_ON_BOOT, enable)
+        }
+    }
+
+    fun saveChunkBurstSize(size: Int) {
+        viewModelScope.launch {
+            val burstSize = size.coerceAtLeast(1) // Ensure at least 1
+            appSettingsRepository.setValue(Settings.CHUNK_BURST_SIZE, burstSize)
+        }
+    }
+
+    fun saveVoltageRetryCount(count: Int) {
+        viewModelScope.launch {
+            val retryCount = count.coerceIn(1, 10) // 1〜10回の範囲に制限
+            appSettingsRepository.setValue(Settings.VOLTAGE_RETRY_COUNT, retryCount)
+        }
+    }
+
+    fun saveVoltageAcquisitionInterval(interval: Int) {
+        viewModelScope.launch {
+            val acquisitionInterval = interval.coerceAtLeast(1) // 1ms以上に制限
+            appSettingsRepository.setValue(Settings.VOLTAGE_ACQUISITION_INTERVAL, acquisitionInterval)
+        }
+    }
+
+    fun saveLowVoltageThreshold(threshold: Float) {
+        viewModelScope.launch {
+            val safeThreshold = threshold.coerceAtLeast(0f) // 0以上に制限 (0は通知OFF)
+            appSettingsRepository.setValue(Settings.LOW_VOLTAGE_THRESHOLD, safeThreshold)
+        }
+    }
+
+    fun saveLowVoltageNotifyEveryTime(everyTime: Boolean) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.LOW_VOLTAGE_NOTIFY_EVERY_TIME, everyTime)
+        }
+    }
+
+    fun saveTranscriptionNotificationEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.TRANSCRIPTION_NOTIFICATION_ENABLED, enabled)
+        }
+    }
+
+    private var lastCheckedApiKey: String = ""
+
+    init {
+        viewModelScope.launch {
+            // Observe API key changes and trigger status check
+            appSettingsRepository.getFlow(Settings.API_KEY).collect { currentApiKey ->
+                if (currentApiKey != lastCheckedApiKey) {
+                    // APIキーが変更されたら、検証済みステータスをリセット
+                    appSettingsRepository.setValue(Settings.IS_API_KEY_VERIFIED, false)
+                    lastCheckedApiKey = currentApiKey
+                }
+                checkApiKeyStatus()
+            }
+        }
+    }
+
+    fun checkApiKeyStatus() {
+        viewModelScope.launch {
+            _apiKeyStatus.value = ApiKeyStatus.CHECKING
+            val apiKey = appSettingsRepository.getFlow(Settings.API_KEY).first() // Get current API key
+
+            if (apiKey.isEmpty()) {
+                _apiKeyStatus.value = ApiKeyStatus.EMPTY
+                appSettingsRepository.setValue(Settings.IS_API_KEY_VERIFIED, false) // APIキーがない場合は未検証に
+                return@launch
+            }
+
+            val isVerifiedInCache = appSettingsRepository.getFlow(Settings.IS_API_KEY_VERIFIED).first()
+            if (isVerifiedInCache && apiKey == lastCheckedApiKey) { // lastCheckedApiKeyでAPIキーの変更がないことを確認
+                _apiKeyStatus.value = ApiKeyStatus.VALID
+                return@launch
+            }
+
+            // APIキーが変更されたか、または未検証の場合はネットワーク経由でチェック
+            val speechToTextService = SpeechToTextService(application, apiKey)
+            val result = speechToTextService.verifyApiKey()
+
+            _apiKeyStatus.value = if (result.isSuccess) {
+                appSettingsRepository.setValue(Settings.IS_API_KEY_VERIFIED, true)
+                ApiKeyStatus.VALID
+            } else {
+                appSettingsRepository.setValue(Settings.IS_API_KEY_VERIFIED, false)
+                // ここでエラーの種類をもう少し細かく分類することも可能だが、一旦INVALIDとする
+                ApiKeyStatus.INVALID
+            }
+        }
+    }
+}
+
+
