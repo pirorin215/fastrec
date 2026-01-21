@@ -6,7 +6,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.pirorin215.fastrecmob.data.AppSettingsRepository
 import com.pirorin215.fastrecmob.data.Settings
+import com.pirorin215.fastrecmob.data.TranscriptionProvider
 import com.pirorin215.fastrecmob.service.SpeechToTextService
+import com.pirorin215.fastrecmob.service.GroqSpeechService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +47,20 @@ class AppSettingsViewModel(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = ""
+        )
+
+    val groqApiKey: StateFlow<String> = appSettingsRepository.getFlow(Settings.GROQ_API_KEY)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ""
+        )
+
+    val transcriptionProvider: StateFlow<TranscriptionProvider> = appSettingsRepository.getFlow(Settings.TRANSCRIPTION_PROVIDER)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = TranscriptionProvider.GOOGLE
         )
 
     val transcriptionCacheLimit: StateFlow<Int> = appSettingsRepository.getFlow(Settings.TRANSCRIPTION_CACHE_LIMIT)
@@ -154,6 +170,18 @@ class AppSettingsViewModel(
     fun saveGeminiApiKey(apiKey: String) {
         viewModelScope.launch {
             appSettingsRepository.setValue(Settings.GEMINI_API_KEY, apiKey)
+        }
+    }
+
+    fun saveGroqApiKey(apiKey: String) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.GROQ_API_KEY, apiKey)
+        }
+    }
+
+    fun saveTranscriptionProvider(provider: TranscriptionProvider) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.TRANSCRIPTION_PROVIDER, provider)
         }
     }
 

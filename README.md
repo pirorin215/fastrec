@@ -16,9 +16,9 @@ FastRecは以下のコンポーネントで構成されるポータブル録音�
 
 ## ✨ 特徴
 
+- **複数の文字起こしプロバイダー対応**: Google Cloud Speech-to-Text または Groq (Whisper) を選択可能
 - **AIボタン**: Gemini APIで録音内容に対するAI応答を生成
 - **ワイヤレス転送**: 録音データをBLE経由でスマホに転送
-- **音声認識**: Google Cloud Speech-to-Text
 - **Tasks連携**: 文字起こし結果をGoogle Tasksに自動登録
   - 通常録音: タイトルに文字起こし、詳細に全文
   - AI録音: タイトルに文字起こし、詳細にAI応答
@@ -216,6 +216,27 @@ Arduino IDE 2.xを使用する場合:
 
    **注意**: AIボタンを使用するには事前にGemini APIキーの設定が必要です
 
+6. **Groq API設定（文字起こしプロバイダーとしてGroqを選択時）**
+   - [Groq Console](https://console.groq.com/) にアクセス
+   - 「Sign up」でアカウント作成、または「Log in」でログイン
+   - 左側メニューから「API Keys」を選択
+   - 「Create API Key」をクリック
+   - APIキー名を入力（任意、例: `FastRec`）
+   - 「Create」ボタンをクリック
+   - 表示されるAPIキーをコピー
+   - Androidアプリの設定画面で:
+     - 「文字起こしプロバイダー」で「Groq (Whisper)」を選択
+     - 「Groq API Key」にAPIキーを入力
+
+   **料金について（2025年1月時点）**:
+   - Groqは現在**非常に寛大な無料枠**を提供しています
+   - 個人利用であれば、まず無料枠で十分です
+   - 詳細: [Groq Pricing](https://groq.com/pricing/)
+
+   **推奨モデル**:
+   - `whisper-large-v3-turbo`: 高速かつ高精度な文字起こし
+   - 日本語対応で優れた認識精度
+
 ![Androidアプリのスクリーンショット](images/app_screenshot.png)
 *(画像: アプリ画面 - 準備中)*
 
@@ -232,6 +253,9 @@ Arduino IDE 2.xを使用する場合:
 - Android 12以降でのBLE接続制限があります
 - 音声認識にはネットワーク接続が必要です
 - Google Cloud Speech API の利用制限に注意してください
+- Groq API（文字起こしプロバイダーとして選択時）:
+  - 現在は寛大な無料枠がありますが、将来の変更には注意してください
+  - 詳細: [Groq Pricing](https://groq.com/pricing/)
 - Gemini API（AIボタン）は従量課金です:
   - 無料枠を使い切ると有料になります（月額100円〜200円程度が目安）
   - **必ず予算上限を設定してください**（上記の手順参照）
@@ -245,6 +269,7 @@ Arduino IDE 2.xを使用する場合:
 
 - [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) - BLEライブラリ
 - [Google Cloud Speech-to-Text](https://cloud.google.com/speech-to-text) - 音声認識API
+- [Groq](https://groq.com/) - 高速AI推論プラットフォーム（Whisper文字起こし）
 - [Google Gemini API](https://ai.google.dev/) - AI応答生成
 - [Jetpack Compose](https://developer.android.com/jetpack/compose) - Android UIフレームワーク
 

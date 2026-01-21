@@ -15,7 +15,9 @@ import com.pirorin215.fastrecmob.data.AppSettingsRepository
 import com.pirorin215.fastrecmob.data.Settings
 import com.pirorin215.fastrecmob.data.TranscriptionResult
 import com.pirorin215.fastrecmob.data.TranscriptionResultRepository
+import com.pirorin215.fastrecmob.data.TranscriptionProvider
 import com.pirorin215.fastrecmob.service.SpeechToTextService
+import com.pirorin215.fastrecmob.service.GroqSpeechService
 import com.pirorin215.fastrecmob.service.GeminiService
 import com.pirorin215.fastrecmob.data.FileUtil
 import kotlinx.coroutines.CoroutineScope
@@ -57,6 +59,7 @@ class TranscriptionManager(
     }
 
     private var speechToTextService: SpeechToTextService? = null
+    private var groqSpeechService: GroqSpeechService? = null
     private var geminiService: GeminiService? = null  // For AI button feature
     private var notificationIdCounter = TRANSCRIPTION_NOTIFICATION_ID
 
@@ -86,14 +89,61 @@ class TranscriptionManager(
     init {
         createTranscriptionNotificationChannel()
 
+        // Watch transcription provider and API keys to initialize appropriate service
+        appSettingsRepository.getFlow(Settings.TRANSCRIPTION_PROVIDER).onEach { provider ->
+            when (provider) {
+                TranscriptionProvider.GOOGLE -> {
+                    val apiKey = appSettingsRepository.getFlow(Settings.API_KEY).first()
+                    if (apiKey.isNotBlank()) {
+                        speechToTextService = SpeechToTextService(context, apiKey)
+                        logManager.addDebugLog("Google Speech service initialized")
+                    } else {
+                        speechToTextService = null
+                        logManager.addDebugLog("Google Speech service cleared: no API key")
+                    }
+                    groqSpeechService = null
+                }
+                TranscriptionProvider.GROQ -> {
+                    val apiKey = appSettingsRepository.getFlow(Settings.GROQ_API_KEY).first()
+                    if (apiKey.isNotBlank()) {
+                        groqSpeechService = GroqSpeechService(context, apiKey)
+                        logManager.addDebugLog("Groq Speech service initialized")
+                    } else {
+                        groqSpeechService = null
+                        logManager.addDebugLog("Groq Speech service cleared: no API key")
+                    }
+                    speechToTextService = null
+                }
+            }
+        }.launchIn(scope)
+
+        // Also watch individual API key changes
         appSettingsRepository.getFlow(Settings.API_KEY)
             .onEach { apiKey ->
-                if (apiKey.isNotBlank()) {
-                    speechToTextService = SpeechToTextService(context, apiKey)
-                    logManager.addDebugLog("Speech service initialized")
-                } else {
-                    speechToTextService = null
-                    logManager.addDebugLog("Speech service cleared: no API key")
+                val provider = appSettingsRepository.getFlow(Settings.TRANSCRIPTION_PROVIDER).first()
+                if (provider == TranscriptionProvider.GOOGLE) {
+                    if (apiKey.isNotBlank()) {
+                        speechToTextService = SpeechToTextService(context, apiKey)
+                        logManager.addDebugLog("Google Speech service initialized")
+                    } else {
+                        speechToTextService = null
+                        logManager.addDebugLog("Speech service cleared: no API key")
+                    }
+                }
+            }
+            .launchIn(scope)
+
+        appSettingsRepository.getFlow(Settings.GROQ_API_KEY)
+            .onEach { apiKey ->
+                val provider = appSettingsRepository.getFlow(Settings.TRANSCRIPTION_PROVIDER).first()
+                if (provider == TranscriptionProvider.GROQ) {
+                    if (apiKey.isNotBlank()) {
+                        groqSpeechService = GroqSpeechService(context, apiKey)
+                        logManager.addDebugLog("Groq Speech service initialized")
+                    } else {
+                        groqSpeechService = null
+                        logManager.addDebugLog("Groq Speech service cleared: no API key")
+                    }
                 }
             }
             .launchIn(scope)
@@ -200,7 +250,17 @@ class TranscriptionManager(
         }
         logManager.addDebugLog("Recording type detected: $recordingType")
 
-        val currentService = speechToTextService
+        // Get current transcription provider
+        val provider = appSettingsRepository.getFlow(Settings.TRANSCRIPTION_PROVIDER).first()
+        val currentService = when (provider) {
+            TranscriptionProvider.GOOGLE -> speechToTextService
+            TranscriptionProvider.GROQ -> groqSpeechService
+        }
+        val providerName = when (provider) {
+            TranscriptionProvider.GOOGLE -> "Google"
+            TranscriptionProvider.GROQ -> "Groq"
+        }
+
         val locationData = currentForegroundLocationFlow.value ?: run {
             logManager.addDebugLog("Foreground location not available, using low-power")
             locationTracker.getLowPowerLocation().getOrNull()
@@ -223,9 +283,12 @@ class TranscriptionManager(
             return
         }
 
-        logManager.addDebugLog("Calling speech service...")
-        val result = currentService.transcribeFile(filePath)
-        logManager.addDebugLog("Speech service completed")
+        logManager.addDebugLog("Calling $providerName speech service...")
+        val result = when (provider) {
+            TranscriptionProvider.GOOGLE -> (currentService as SpeechToTextService).transcribeFile(filePath)
+            TranscriptionProvider.GROQ -> (currentService as GroqSpeechService).transcribeFile(filePath)
+        }
+        logManager.addDebugLog("$providerName speech service completed")
 
         result.onSuccess { fullTranscription ->
             val googleTaskTitleLength = googleTaskTitleLengthFlow.first()

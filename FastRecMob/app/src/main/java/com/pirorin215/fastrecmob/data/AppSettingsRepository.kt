@@ -42,12 +42,42 @@ sealed class SettingKey<T> {
 }
 
 /**
+ * Transcription provider options
+ */
+enum class TranscriptionProvider {
+    GOOGLE,
+    GROQ;
+
+    companion object {
+        fun fromString(value: String?): TranscriptionProvider {
+            return try {
+                valueOf(value ?: "GOOGLE")
+            } catch (e: IllegalArgumentException) {
+                GOOGLE
+            }
+        }
+    }
+}
+
+/**
  * Centralized definition of all app settings
  */
 object Settings {
     val API_KEY = SettingKey.Direct(
         stringPreferencesKey("google_cloud_api_key"),
         ""
+    )
+
+    val GROQ_API_KEY = SettingKey.Direct(
+        stringPreferencesKey("groq_api_key"),
+        ""
+    )
+
+    val TRANSCRIPTION_PROVIDER = SettingKey.Mapped(
+        preferencesKey = stringPreferencesKey("transcription_provider"),
+        defaultValue = TranscriptionProvider.GOOGLE,
+        toStored = { it.name },
+        fromStored = { TranscriptionProvider.fromString(it) }
     )
 
     val GEMINI_API_KEY = SettingKey.Direct(

@@ -42,6 +42,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import com.pirorin215.fastrecmob.data.ThemeMode
+import com.pirorin215.fastrecmob.data.TranscriptionProvider
 import com.pirorin215.fastrecmob.viewModel.AppSettingsViewModel
 import kotlin.math.roundToInt
 
@@ -55,6 +56,8 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
     // DataStoreから現在の設定値を取得
     val currentApiKey by appSettingsViewModel.apiKey.collectAsState()
     val currentGeminiApiKey by appSettingsViewModel.geminiApiKey.collectAsState()
+    val currentGroqApiKey by appSettingsViewModel.groqApiKey.collectAsState()
+    val currentTranscriptionProvider by appSettingsViewModel.transcriptionProvider.collectAsState()
     val currentTranscriptionCacheLimit by appSettingsViewModel.transcriptionCacheLimit.collectAsState() // Renamed
     val currentFontSize by appSettingsViewModel.transcriptionFontSize.collectAsState()
     val currentThemeMode by appSettingsViewModel.themeMode.collectAsState()
@@ -70,6 +73,8 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
     // TextFieldの状態を管理
     var apiKeyText by remember(currentApiKey) { mutableStateOf(currentApiKey) }
     var geminiApiKeyText by remember(currentGeminiApiKey) { mutableStateOf(currentGeminiApiKey) }
+    var groqApiKeyText by remember(currentGroqApiKey) { mutableStateOf(currentGroqApiKey) }
+    var selectedTranscriptionProvider by remember(currentTranscriptionProvider) { mutableStateOf(currentTranscriptionProvider) }
     var transcriptionCacheLimitText by remember(currentTranscriptionCacheLimit) { mutableStateOf(currentTranscriptionCacheLimit.toString()) } // Renamed
     var fontSizeSliderValue by remember(currentFontSize) { mutableStateOf(currentFontSize.toFloat()) }
     var selectedThemeMode by remember(currentThemeMode) { mutableStateOf(currentThemeMode) }
@@ -85,6 +90,8 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
     val saveSettings = {
         appSettingsViewModel.saveApiKey(apiKeyText)
         appSettingsViewModel.saveGeminiApiKey(geminiApiKeyText)
+        appSettingsViewModel.saveGroqApiKey(groqApiKeyText)
+        appSettingsViewModel.saveTranscriptionProvider(selectedTranscriptionProvider)
         val transcriptionCacheLimit = transcriptionCacheLimitText.toIntOrNull() ?: 100
         appSettingsViewModel.saveTranscriptionCacheLimit(transcriptionCacheLimit)
         appSettingsViewModel.saveTranscriptionFontSize(fontSizeSliderValue.roundToInt())
@@ -141,6 +148,54 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
                 label = { Text("Gemini API Key") },
                 modifier = Modifier.fillMaxWidth()
             )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = groqApiKeyText,
+                onValueChange = { groqApiKeyText = it },
+                label = { Text("Groq API Key") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Transcription Provider Selection
+            Text("文字起こしプロバイダー")
+            Spacer(modifier = Modifier.height(8.dp))
+            Column {
+                // Google
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    RadioButton(
+                        selected = selectedTranscriptionProvider == TranscriptionProvider.GOOGLE,
+                        onClick = { selectedTranscriptionProvider = TranscriptionProvider.GOOGLE },
+                        colors = RadioButtonDefaults.colors(
+                            selectedColor = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                        )
+                    )
+                    Text(
+                        text = "Google Cloud Speech-to-Text",
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+                // Groq
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    RadioButton(
+                        selected = selectedTranscriptionProvider == TranscriptionProvider.GROQ,
+                        onClick = { selectedTranscriptionProvider = TranscriptionProvider.GROQ },
+                        colors = RadioButtonDefaults.colors(
+                            selectedColor = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                        )
+                    )
+                    Text(
+                        text = "Groq (Whisper)",
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = transcriptionCacheLimitText, // Renamed
