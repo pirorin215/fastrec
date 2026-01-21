@@ -16,9 +16,12 @@ FastRecは以下のコンポーネントで構成されるポータブル録音�
 
 ## ✨ 特徴
 
+- **AIボタン**: Gemini APIで録音内容に対するAI応答を生成
 - **ワイヤレス転送**: 録音データをBLE経由でスマホに転送
 - **音声認識**: Google Cloud Speech-to-Text
 - **Tasks連携**: 文字起こし結果をGoogle Tasksに自動登録
+  - 通常録音: タイトルに文字起こし、詳細に全文
+  - AI録音: タイトルに文字起こし、詳細にAI応答
 - **振動フィードバック**: ボタン押下中のみ録音するハプティクスフィードバック
 - **低電圧通知**: 電池電圧を監視し、設定電圧を下回るとAndroidアプリに通知（充電忘れ防止）
 - **バッテリー効率**: Deep Sleepモード対応で長時間駆動（150mAhで約5日）
@@ -164,11 +167,54 @@ Arduino IDE 2.xを使用する場合:
    - [Google Cloud Console](https://console.cloud.google.com) でAPIキーを取得
    - Androidアプリの設定画面でAPIキーを入力
 
-6. **録音・転送・文字起こし**
-   - デバイスの録音ボタンを押してる間録音
-   - Androidアプリでデータ転送
-   - 自動で音声認識・文字起こし
-   - Google Tasksに登録
+6. **Gemini API設定（AIボタン使用時）**
+   - [Google AI Studio](https://aistudio.google.com/app/apikeys) にアクセス
+   - Googleアカウントでログイン（まだの場合はログインしてください）
+   - **初回のみ**: 利用規約が表示されるので「同意する」をクリック
+   - 「Create API Key」ボタンをクリック
+   - **Google Cloudプロジェクトの作成/選択**:
+     - 「Create a new Google Cloud project」を選択
+     - プロジェクト名を入力（任意、例: `FastRec-Gemini`）
+     - 「Create」ボタンをクリック
+   - APIキーが自動生成されるので、コピー
+   - Androidアプリの設定画面で「Gemini API Key」に入力
+
+   **重要 - 予算上限の設定（推奨）**:
+
+   Gemini API は従量課金ですが、無料枠を使い切ると有料になります。予期せぬ課金を防ぐため、予算上限を設定することを強く推奨します。
+
+   **予算上限設定手順**:
+   1. [Google Cloud Console - 請求先アカウント](https://console.cloud.google.com/billing) にアクセス
+   2. 該求先アカウントがリンクされていることを確認
+   3. 左側メニューから「お支払い」→「予算とアラート」を選択
+   4. 「予算を設定」をクリック
+   5. 予算金額を入力（例: 500円）
+   6. 予算に達した時のアクションを選択:
+      - メール通知を受け取る（推奨）
+      - API を無効にする（強く推奨）
+   7. 「保存」をクリック
+
+   **料金目安（2025年1月時点）**:
+   - Gemini 2.0 Flash: 個人利用で月額 **100円〜200円程度**（使用頻度によります）
+   - 詳細: [Google AI Pricing](https://ai.google.dev/pricing)
+
+   **注意**: AIボタンを使用するには、請求先アカウントの設定と予算上限の設定が推奨されます。設定しない場合、無制限に課金される可能性があります。
+
+7. **録音・転送・文字起こし**
+   - **通常録音ボタン（RECボタン）**:
+     - ボタンを押している間録音
+     - Androidアプリでデータ転送
+     - 自動で音声認識・文字起こし
+     - Google Tasksに登録（タイトル: 文字起こし、詳細: 全文）
+
+   - **AIボタン（AIボタン）**:
+     - ボタンを押している間録音
+     - Androidアプリでデータ転送
+     - 音声認識後、**Gemini APIでAI応答を生成**
+     - Google Tasksに登録（タイトル: 文字起こし、詳細: AI応答）
+     - 通知にはAI応答が表示されます
+
+   **注意**: AIボタンを使用するには事前にGemini APIキーの設定が必要です
 
 ![Androidアプリのスクリーンショット](images/app_screenshot.png)
 *(画像: アプリ画面 - 準備中)*
@@ -186,6 +232,10 @@ Arduino IDE 2.xを使用する場合:
 - Android 12以降でのBLE接続制限があります
 - 音声認識にはネットワーク接続が必要です
 - Google Cloud Speech API の利用制限に注意してください
+- Gemini API（AIボタン）は従量課金です:
+  - 無料枠を使い切ると有料になります（月額100円〜200円程度が目安）
+  - **必ず予算上限を設定してください**（上記の手順参照）
+  - 詳細: [Google AI Pricing](https://ai.google.dev/pricing)
 
 ## 📄 ライセンス
 
@@ -195,8 +245,9 @@ Arduino IDE 2.xを使用する場合:
 
 - [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) - BLEライブラリ
 - [Google Cloud Speech-to-Text](https://cloud.google.com/speech-to-text) - 音声認識API
+- [Google Gemini API](https://ai.google.dev/) - AI応答生成
 - [Jetpack Compose](https://developer.android.com/jetpack/compose) - Android UIフレームワーク
 
 ---
 
-**最終更新**: 2026-01-19
+**最終更新**: 2025-01-21

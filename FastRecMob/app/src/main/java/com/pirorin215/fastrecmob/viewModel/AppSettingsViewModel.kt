@@ -40,6 +40,13 @@ class AppSettingsViewModel(
             initialValue = ""
         )
 
+    val geminiApiKey: StateFlow<String> = appSettingsRepository.getFlow(Settings.GEMINI_API_KEY)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ""
+        )
+
     val transcriptionCacheLimit: StateFlow<Int> = appSettingsRepository.getFlow(Settings.TRANSCRIPTION_CACHE_LIMIT)
         .stateIn(
             scope = viewModelScope,
@@ -141,6 +148,12 @@ class AppSettingsViewModel(
     fun saveApiKey(apiKey: String) {
         viewModelScope.launch {
             appSettingsRepository.setValue(Settings.API_KEY, apiKey)
+        }
+    }
+
+    fun saveGeminiApiKey(apiKey: String) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.GEMINI_API_KEY, apiKey)
         }
     }
 

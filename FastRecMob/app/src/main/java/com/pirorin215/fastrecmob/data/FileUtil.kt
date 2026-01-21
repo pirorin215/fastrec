@@ -14,7 +14,7 @@ import java.util.Locale
 data class DateTimeInfo(val date: String, val time: String)
 
 object FileUtil {
-    private val FILE_NAME_DATETIME_REGEX = Regex("""[RM](\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})\.(wav|txt)""")
+    private val FILE_NAME_DATETIME_REGEX = Regex("""(?:R|M|AI)(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})\.(wav|txt)""")
 
     /**
      * Extract datetime string from file name

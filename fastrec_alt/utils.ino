@@ -134,7 +134,10 @@ void generateFilenameFromRTC(char* filenameBuffer, size_t bufferSize) {
     char time_buf[64];
     strftime(time_buf, sizeof(time_buf), "%A, %B %d %Y %H:%M:%S", &timeinfo);
     applog("Current time from RTC: %s", time_buf);
-    strftime(filenameBuffer, bufferSize, "/R%Y-%m-%d-%H-%M-%S.wav", &timeinfo);
+    // Use AI prefix for AI mode, R prefix for normal mode
+    const char* prefix = g_is_ai_recording ? "/AI" : "/R";
+    strftime(filenameBuffer, bufferSize, prefix, &timeinfo);
+    strftime(filenameBuffer + strlen(filenameBuffer), bufferSize - strlen(filenameBuffer), "%Y-%m-%d-%H-%M-%S.wav", &timeinfo);
     applog("Generated filename (RTC): %s", filenameBuffer);
   }
 }

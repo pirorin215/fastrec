@@ -381,8 +381,14 @@ void handleIdle() {
     lastDisplayUpdateTime = millis();
   }
 
-  if (digitalRead(REC_BUTTON_GPIO) == HIGH) { // Recording switch is pressed
-    setLcdBrightness(0xFF); // Brighten LCD
+  if (digitalRead(REC_BUTTON_GPIO) == HIGH) {
+    setLcdBrightness(0xFF);
+    g_is_ai_recording = false;
+    startRecording();
+    return;
+  } else if (digitalRead(AI_BUTTON_GPIO) == HIGH) {
+    setLcdBrightness(0xFF);
+    g_is_ai_recording = true;
     startRecording();
     return;
   }
@@ -403,16 +409,13 @@ void handleRec() {
 
   stop_ble_advertising();
 
-  // If recording switch is turned off, stop recording (with debounce)
-  bool currentButtonState = (digitalRead(REC_BUTTON_GPIO) == LOW);
-
-  if (currentButtonState) {  // Button is LOW (released)
+  if (digitalRead(REC_BUTTON_GPIO) == LOW && digitalRead(AI_BUTTON_GPIO) == LOW) {
     if (buttonWasHigh) {
       // First time detecting LOW state - start debounce timer
       buttonLowStartTime = millis();
       buttonWasHigh = false;
     } else if (millis() - buttonLowStartTime >= BUTTON_DEBOUNCE_MS) {
-      // LOW state has persisted for debounce period - button truly released
+      // LOW state has persisted for debounce period - buttons truly released
       applog("Recording switch turned OFF. Stopping recording.");
       stopRecording();
       g_scheduledStopTimeMillis = 0;  // Reset for next recording
@@ -420,7 +423,7 @@ void handleRec() {
       return;
     }
   } else {
-    // Button is HIGH (pressed) - reset debounce state
+    // At least one button is HIGH (pressed) - reset debounce state
     buttonWasHigh = true;
     buttonLowStartTime = 0;
   }
@@ -489,6 +492,7 @@ void initPins() {
   digitalWrite(LED_BUILTIN, HIGH); // LED消灯
 
   pinMode(REC_BUTTON_GPIO, INPUT_PULLDOWN);
+  pinMode(AI_BUTTON_GPIO, INPUT_PULLDOWN);
   pinMode(MOTOR_GPIO, OUTPUT);
   pinMode(USB_DETECT_PIN, INPUT);  // Initialize USB connect pin
 

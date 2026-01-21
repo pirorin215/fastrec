@@ -13,6 +13,7 @@
 
 // GPIO settings
 #define REC_BUTTON_GPIO    GPIO_NUM_1
+#define AI_BUTTON_GPIO     GPIO_NUM_2
 
 #define MOTOR_GPIO         GPIO_NUM_3
 #define USB_DETECT_PIN     GPIO_NUM_4
@@ -177,6 +178,7 @@ File g_audioFile;
 char g_audio_filename[64];
 int g_audioFileCount;
 uint32_t g_totalBytesRecorded = 0;
+volatile bool g_is_ai_recording = false;  // AI mode flag
 
 // ble setting
 volatile bool g_start_file_transfer = false;

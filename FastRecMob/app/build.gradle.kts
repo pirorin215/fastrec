@@ -118,6 +118,9 @@ dependencies {
     // gRPCトランスポートを追加 (Google Cloud Libraries BOMがバージョンを管理)
     implementation(libs.grpc.okhttp)
 
+    // Gemini API for AI button feature
+    implementation(libs.generativeai)
+
     // DataStore for persistent settings
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.composereorderable)

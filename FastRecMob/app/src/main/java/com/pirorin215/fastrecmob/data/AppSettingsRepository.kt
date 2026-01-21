@@ -50,6 +50,11 @@ object Settings {
         ""
     )
 
+    val GEMINI_API_KEY = SettingKey.Direct(
+        stringPreferencesKey("gemini_api_key"),
+        ""
+    )
+
     val TRANSCRIPTION_CACHE_LIMIT = SettingKey.Direct(
         intPreferencesKey("transcription_cache_limit"),
         100

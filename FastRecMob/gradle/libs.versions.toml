@@ -21,6 +21,7 @@ googleCloudLibrariesBom = "26.36.0"
 datastorePreferences = "1.1.1"
 composereorderable = "0.9.6"
 kotlinxCoroutinesGuava = "1.7.3"
+generativeai = "0.9.0"  # Gemini API
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -54,6 +55,7 @@ kotlinx-coroutines-guava = { group = "org.jetbrains.kotlinx", name = "kotlinx-co
 grpc-okhttp = { group = "io.grpc", name = "grpc-okhttp" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }
 composereorderable = { group = "org.burnoutcrew.composereorderable", name = "reorderable", version.ref = "composereorderable" }
+generativeai = { group = "com.google.ai.client.generativeai", name = "generativeai", version.ref = "generativeai" }
 
 vico-compose = { group = "com.patrykandpatrick.vico", name = "compose", version.ref = "vico" }
 vico-compose-m3 = { group = "com.patrykandpatrick.vico", name = "compose-m3", version.ref = "vico" }

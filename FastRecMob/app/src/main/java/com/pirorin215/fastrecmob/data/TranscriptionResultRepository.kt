@@ -34,7 +34,10 @@ data class TranscriptionResult(
     val googleTaskWebViewLink: String? = null,
     val isSyncedWithGoogleTasks: Boolean = false,
     val isDeletedLocally: Boolean = false, // New field for soft deletion
-    val transcriptionStatus: String = "COMPLETED" // PENDING, COMPLETED, FAILED
+    val transcriptionStatus: String = "COMPLETED", // PENDING, COMPLETED, FAILED
+    // New fields for AI button feature
+    val recordingType: String = "NORMAL",  // "NORMAL" or "AI"
+    val aiResponse: String? = null         // AI response from Gemini
 ) {
     // Secondary constructor to simplify creation when lastEditedTimestamp is current time
     constructor(
@@ -57,7 +60,10 @@ data class TranscriptionResult(
         googleTaskWebViewLink = null,
         isSyncedWithGoogleTasks = false,
         isDeletedLocally = false, // Default for new field
-        transcriptionStatus = "COMPLETED"
+        transcriptionStatus = "COMPLETED",
+        // Default values for new AI fields
+        recordingType = "NORMAL",
+        aiResponse = null
     )
 }
 

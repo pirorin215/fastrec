@@ -54,6 +54,7 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
 
     // DataStoreから現在の設定値を取得
     val currentApiKey by appSettingsViewModel.apiKey.collectAsState()
+    val currentGeminiApiKey by appSettingsViewModel.geminiApiKey.collectAsState()
     val currentTranscriptionCacheLimit by appSettingsViewModel.transcriptionCacheLimit.collectAsState() // Renamed
     val currentFontSize by appSettingsViewModel.transcriptionFontSize.collectAsState()
     val currentThemeMode by appSettingsViewModel.themeMode.collectAsState()
@@ -68,6 +69,7 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
 
     // TextFieldの状態を管理
     var apiKeyText by remember(currentApiKey) { mutableStateOf(currentApiKey) }
+    var geminiApiKeyText by remember(currentGeminiApiKey) { mutableStateOf(currentGeminiApiKey) }
     var transcriptionCacheLimitText by remember(currentTranscriptionCacheLimit) { mutableStateOf(currentTranscriptionCacheLimit.toString()) } // Renamed
     var fontSizeSliderValue by remember(currentFontSize) { mutableStateOf(currentFontSize.toFloat()) }
     var selectedThemeMode by remember(currentThemeMode) { mutableStateOf(currentThemeMode) }
@@ -82,6 +84,7 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
 
     val saveSettings = {
         appSettingsViewModel.saveApiKey(apiKeyText)
+        appSettingsViewModel.saveGeminiApiKey(geminiApiKeyText)
         val transcriptionCacheLimit = transcriptionCacheLimitText.toIntOrNull() ?: 100
         appSettingsViewModel.saveTranscriptionCacheLimit(transcriptionCacheLimit)
         appSettingsViewModel.saveTranscriptionFontSize(fontSizeSliderValue.roundToInt())
@@ -129,6 +132,13 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
                 value = apiKeyText,
                 onValueChange = { apiKeyText = it },
                 label = { Text(stringResource(R.string.google_api_key_label)) },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = geminiApiKeyText,
+                onValueChange = { geminiApiKeyText = it },
+                label = { Text("Gemini API Key") },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))

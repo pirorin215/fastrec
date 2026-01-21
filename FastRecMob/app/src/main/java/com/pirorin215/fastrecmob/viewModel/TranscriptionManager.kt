@@ -16,6 +16,7 @@ import com.pirorin215.fastrecmob.data.Settings
 import com.pirorin215.fastrecmob.data.TranscriptionResult
 import com.pirorin215.fastrecmob.data.TranscriptionResultRepository
 import com.pirorin215.fastrecmob.service.SpeechToTextService
+import com.pirorin215.fastrecmob.service.GeminiService
 import com.pirorin215.fastrecmob.data.FileUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +57,7 @@ class TranscriptionManager(
     }
 
     private var speechToTextService: SpeechToTextService? = null
+    private var geminiService: GeminiService? = null  // For AI button feature
     private var notificationIdCounter = TRANSCRIPTION_NOTIFICATION_ID
 
     private val _transcriptionState = MutableStateFlow("Idle")
@@ -92,6 +94,19 @@ class TranscriptionManager(
                 } else {
                     speechToTextService = null
                     logManager.addDebugLog("Speech service cleared: no API key")
+                }
+            }
+            .launchIn(scope)
+
+        // Initialize Gemini service for AI button feature
+        appSettingsRepository.getFlow(Settings.GEMINI_API_KEY)
+            .onEach { apiKey ->
+                if (apiKey.isNotBlank()) {
+                    geminiService = GeminiService(context, apiKey)
+                    logManager.addDebugLog("Gemini service initialized")
+                } else {
+                    geminiService = null
+                    logManager.addDebugLog("Gemini service cleared: no API key")
                 }
             }
             .launchIn(scope)
@@ -133,7 +148,7 @@ class TranscriptionManager(
         )
 
         val notification = NotificationCompat.Builder(context, TRANSCRIPTION_CHANNEL_ID)
-            .setContentTitle(transcriptionText)
+            .setContentTitle(transcriptionText.take(50))
             .setSmallIcon(R.mipmap.ic_launcher_round)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -178,6 +193,13 @@ class TranscriptionManager(
         val filePath = FileUtil.getAudioFile(context, audioDirNameFlow.value, resultToProcess.fileName).absolutePath
         _transcriptionState.value = "Transcribing ${File(filePath).name}"
 
+        // Detect recording type from filename (AI*.wav vs R*.wav)
+        val recordingType = when {
+            resultToProcess.fileName.startsWith("AI") && resultToProcess.fileName.length > 2 && resultToProcess.fileName[2].isDigit() -> "AI"
+            else -> "NORMAL"
+        }
+        logManager.addDebugLog("Recording type detected: $recordingType")
+
         val currentService = speechToTextService
         val locationData = currentForegroundLocationFlow.value ?: run {
             logManager.addDebugLog("Foreground location not available, using low-power")
@@ -194,7 +216,8 @@ class TranscriptionManager(
             val errorResult = resultToProcess.copy(
                 transcription = "文字起こしエラー: $errorMessage",
                 locationData = locationData ?: resultToProcess.locationData,
-                transcriptionStatus = "FAILED"
+                transcriptionStatus = "FAILED",
+                recordingType = recordingType
             )
             transcriptionResultRepository.addResult(errorResult)
             return
@@ -211,23 +234,50 @@ class TranscriptionManager(
             val cleanTitle = rawTitle.replace("\n", "")
             val title = if (cleanTitle.isBlank()) "Transcription" else cleanTitle
 
-            val notes = if (fullTranscription.length > googleTaskTitleLength) {
-                fullTranscription
+            // For AI mode, process with Gemini
+            var aiResponse: String? = null
+            var finalNotes: String? = null
+            var notificationText = fullTranscription  // Default notification text
+
+            if (recordingType == "AI") {
+                logManager.addDebugLog("AI mode detected, calling Gemini service...")
+                val geminiResult = geminiService?.generateResponse(fullTranscription)
+
+                geminiResult?.onSuccess { response ->
+                    aiResponse = response
+                    finalNotes = response  // AI response goes to notes
+                    notificationText = response  // Show AI response in notification
+                    logManager.addDebugLog("Gemini response received: ${response.take(50)}...")
+                }?.onFailure { error ->
+                    logManager.addLog("Gemini API failed: ${error.message}", LogLevel.ERROR)
+                    // AI失敗を明示的に記録
+                    aiResponse = null
+                    val errorMessage = "AI応答の生成に失敗しました: ${error.message}"
+                    finalNotes = "$errorMessage\n\n【文字起こし】\n$fullTranscription"
+                    notificationText = "⚠️ AI応答の生成に失敗しました\n$title"
+                }
             } else {
-                null
+                // Normal mode: use transcription as notes if overflow
+                finalNotes = if (fullTranscription.length > googleTaskTitleLength) {
+                    fullTranscription
+                } else {
+                    null
+                }
             }
 
-            _transcriptionResult.value = title // Display the clean title
-            logManager.addLog("Transcribed: '$title'")
+            _transcriptionResult.value = title
+            logManager.addLog("Transcribed: '$title' (type: $recordingType)")
             val newResult = resultToProcess.copy(
-                transcription = title, // Save the title as the main transcription
-                googleTaskNotes = notes, // Save full transcription as notes if overflow
+                transcription = title,
+                googleTaskNotes = finalNotes,
+                recordingType = recordingType,
+                aiResponse = aiResponse,
                 locationData = locationData ?: resultToProcess.locationData,
                 transcriptionStatus = "COMPLETED"
             )
             transcriptionResultRepository.addResult(newResult)
-            // Send notification if enabled
-            sendTranscriptionNotification(fullTranscription)
+            // Send notification (AI response or transcription)
+            sendTranscriptionNotification(notificationText)
             // Immediately sync with Google Tasks after successful transcription
             googleTasksIntegration.syncTranscriptionResultsWithGoogleTasks(audioDirNameFlow.value)
             // Notify that processing for this file is complete
@@ -245,7 +295,8 @@ class TranscriptionManager(
             val errorResult = resultToProcess.copy(
                 transcription = displayMessage,
                 locationData = locationData ?: resultToProcess.locationData,
-                transcriptionStatus = "FAILED"
+                transcriptionStatus = "FAILED",
+                recordingType = recordingType
             )
             transcriptionResultRepository.addResult(errorResult)
             // Immediately sync with Google Tasks after failure to create a task indicating the error
@@ -386,11 +437,20 @@ class TranscriptionManager(
         }
 
         logManager.addDebugLog("New transcription record: $fileName")
+
+        // Detect recording type from filename
+        val recordingType = when {
+            fileName.startsWith("AI") && fileName.length > 2 && fileName[2].isDigit() -> "AI"
+            else -> "NORMAL"
+        }
+        logManager.addDebugLog("Recording type: $recordingType")
+
         val newResult = TranscriptionResult(
             fileName = fileName,
             transcription = "", // Empty transcription initially
             locationData = null, // Location will be fetched during transcription
-            transcriptionStatus = "PENDING"
+            transcriptionStatus = "PENDING",
+            recordingType = recordingType
         )
 
         // Add to DataStore (for persistence across app restarts)
