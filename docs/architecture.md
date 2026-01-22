@@ -11,10 +11,10 @@ FastRecは以下の3つの主要コンポーネントで構成されます：
 ## 通信フロー
 
 ```
-┌─────────────┐      BLE       ┌──────────────┐
-│  Android    │ ←───────────→  │   ESP32-S3   │
-│  FastRecMob │               │  fastrec_alt  │
-└─────────────┘               └──────────────┘
+┌─────────────────────────────┐      BLE       ┌──────────────┐
+│  Android                    │ ←───────────→  │   ESP32-S3   │
+│  com.pirorin215.fastrecmob  │               │  fastrec_alt  │
+└─────────────────────────────┘               └──────────────┘
        │                              │
        │ HTTPS                        │
        ↓                              │
@@ -49,8 +49,9 @@ Data:          Repository + BLE Service + DataStore
 | MainActivity | UIホスト、パーミッション処理 |
 | BleScanService | バックグラウンドBLEスキャン |
 | BleRepository | GATT通信・データ転送 |
-| SpeechRepository | Google Cloud API呼び出し |
-| SettingsDataStore | 設定の永続化 |
+| SpeechToTextService | Google Cloud Speech-to-Text API呼び出し |
+| AppSettingsRepository | 設定の永続化（DataStore） |
+| MainViewModel | UI状態管理・BLEオーケストレーション |
 
 ## ESP32-S3ファームウェア構成
 
@@ -77,11 +78,11 @@ enum AppState {
 
 ### BLE GATTサービス
 
-- **Service UUID**: `0x180A`（Device Information）
+- **Service UUID**: `4fafc201-1fb5-459e-8fcc-c5c9c331914b`（カスタムサービス）
 - **Characteristic**:
-  - 録音制御（Read/Write/Notify）
-  - データ転送（Notify）
-  - ステータス通知（Notify）
+  - COMMAND UUID: `beb5483e-36e1-4688-b7f5-ea07361b26aa`（Write）- コマンド送信
+  - RESPONSE UUID: `beb5483e-36e1-4688-b7f5-ea07361b26ab`（Notify）- データ転送・ステータス通知
+  - ACK UUID: `beb5483e-36e1-4688-b7f5-ea07361b26ac`（Write No Response）- 転送確認
 
 ## データフロー
 

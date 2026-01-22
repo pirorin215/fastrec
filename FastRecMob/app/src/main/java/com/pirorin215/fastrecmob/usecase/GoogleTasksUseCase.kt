@@ -19,6 +19,9 @@ import com.pirorin215.fastrecmob.data.TranscriptionResult
 import com.pirorin215.fastrecmob.data.TranscriptionResultRepository
 import com.pirorin215.fastrecmob.network.GoogleTasksApiService
 import com.pirorin215.fastrecmob.network.RetrofitClient
+import com.pirorin215.fastrecmob.network.GASTasksApiService
+import com.pirorin215.fastrecmob.network.GASRetrofitClient
+import com.pirorin215.fastrecmob.network.GASAddTaskRequest
 import com.pirorin215.fastrecmob.viewModel.LogManager
 import java.time.LocalDate
 import java.time.LocalTime
@@ -58,6 +61,10 @@ class GoogleTasksUseCase(
             val account = _account.value ?: throw IllegalStateException("User not signed in for Google Tasks API.")
             GoogleAuthUtil.getToken(application, account.account!!, "oauth2:$tasksScope")
         }
+    }
+
+    private val gasApiService: GASTasksApiService by lazy {
+        GASRetrofitClient.create()
     }
 
     init {
@@ -124,6 +131,30 @@ class GoogleTasksUseCase(
         }
     }
 
+    /**
+     * Calculate due date for today in JST timezone as UTC midnight in RFC3339 format
+     * This matches the format required by Google Tasks API
+     */
+    private fun calculateDueForToday(): String? {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            LocalDate.now(ZoneId.of("Asia/Tokyo"))
+                .atStartOfDay()
+                .atOffset(ZoneOffset.UTC)
+                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        } else {
+            val jst = java.util.TimeZone.getTimeZone("Asia/Tokyo")
+            val cal = java.util.Calendar.getInstance(jst)
+            cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            cal.set(java.util.Calendar.MINUTE, 0)
+            cal.set(java.util.Calendar.SECOND, 0)
+            cal.set(java.util.Calendar.MILLISECOND, 0)
+
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
+            sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            sdf.format(cal.time)
+        }
+    }
+
     private suspend fun addGoogleTask(title: String, notes: String?, isCompleted: Boolean, due: String?): Task? {
         if (_account.value == null || title.isBlank()) return null
         val currentTaskListId = taskListId ?: getTaskListId() ?: return null
@@ -139,49 +170,65 @@ class GoogleTasksUseCase(
         }
     }
 
-    private suspend fun updateGoogleTask(localResult: TranscriptionResult): Task? {
-        val taskId = localResult.googleTaskId ?: return null
-        if (_account.value == null) return null
-        val currentTaskListId = taskListId ?: getTaskListId() ?: return null
-
-        try {
-            // Fetch the current state of the task from Google Tasks
-            val remoteTask = apiService.getTask(currentTaskListId, taskId)
-            val remoteTimestamp = FileUtil.parseRfc3339Timestamp(remoteTask.updated)
-            val localTimestamp = localResult.lastEditedTimestamp
-
-            if (localTimestamp < remoteTimestamp) {
-                logManager.addLog("Skipping update for task '${localResult.transcription}' (ID: $taskId). Remote version is newer.")
-                return remoteTask // Return remote task to signal that remote is newer
-            }
-
-            // Proceed with the update if the local version is newer
-            val status = if (localResult.isCompleted) "completed" else "needsAction"
-            val taskToUpdate = Task(
-                id = taskId,
-                title = localResult.transcription,
-                notes = localResult.googleTaskNotes,
-                status = status,
-                due = remoteTask.due
-            )
-
-            val updatedTask = apiService.updateTask(currentTaskListId, taskId, taskToUpdate)
-            logManager.addLog("Updated Google Task: ${localResult.transcription} (ID: $taskId)")
-            return updatedTask
-
-        } catch (e: Exception) {
-            logManager.addLog("Error updating or checking Google Task '${localResult.transcription}' (ID: $taskId): ${e.message}")
+    /**
+     * Add a task via Google Apps Script webhook
+     * This method bypasses OAuth and uses a user-provided GAS webhook URL
+     */
+    private suspend fun addTaskViaGAS(title: String, notes: String?, isCompleted: Boolean, due: String?): String? {
+        val gasWebhookUrl = appSettingsRepository.getFlow(Settings.GAS_WEBHOOK_URL).first()
+        if (gasWebhookUrl.isBlank()) {
+            logManager.addLog("GAS Webhook URL is not configured.")
             return null
+        }
+
+        val taskListName = appSettingsRepository.getFlow(Settings.GOOGLE_TODO_LIST_NAME).first()
+        val request = GASAddTaskRequest(
+            taskListName = taskListName,
+            title = title,
+            notes = notes,
+            isCompleted = isCompleted,
+            due = due // Add due date
+        )
+
+        return try {
+            val response = gasApiService.addTask(gasWebhookUrl, request)
+            if (response.success) {
+                logManager.addLog("Added task via GAS: $title (ID: ${response.taskId})")
+                response.taskId
+            } else {
+                logManager.addLog("Failed to add task via GAS: ${response.error}")
+                null
+            }
+        } catch (e: Exception) {
+            logManager.addLog("Error adding task via GAS: ${e.message}")
+            null
         }
     }
 
     suspend fun syncTranscriptionResultsWithGoogleTasks(audioDirName: String) {
-        if (_account.value == null) {
-            logManager.addLog("Not signed in to Google. Cannot sync tasks.")
-            return
+        // Get the sync mode (OAUTH or GAS)
+        val googleTasksMode = appSettingsRepository.getFlow(Settings.GOOGLE_TASKS_MODE).first()
+        val useGAS = googleTasksMode == com.pirorin215.fastrecmob.data.GoogleTasksMode.GAS
+
+        // Check if due date is enabled
+        val enableDue = appSettingsRepository.getFlow(Settings.ENABLE_GOOGLE_TASK_DUE).first()
+
+        // Validate that required credentials are available
+        if (useGAS) {
+            val gasWebhookUrl = appSettingsRepository.getFlow(Settings.GAS_WEBHOOK_URL).first()
+            if (gasWebhookUrl.isBlank()) {
+                logManager.addLog("GAS mode selected but webhook URL is not configured.")
+                return
+            }
+        } else {
+            if (_account.value == null) {
+                logManager.addLog("OAuth mode selected but not signed in to Google.")
+                return
+            }
         }
+
         _isLoadingGoogleTasks.value = true
-        logManager.addLog("Starting Google Tasks synchronization...")
+        logManager.addLog("Starting Google Tasks synchronization... (mode: ${if (useGAS) "GAS" else "OAuth"}, due: ${if (enableDue) "enabled" else "disabled"})")
 
         try {
             val localResults = transcriptionResultRepository.transcriptionResultsFlow.first()
@@ -194,94 +241,50 @@ class GoogleTasksUseCase(
                     continue
                 }
 
+                // Only add new tasks (googleTaskId == null), skip existing tasks
                 if (localResult.googleTaskId == null) {
                     // This is a new item, add it to Google Tasks
                     logManager.addLog("Local result '${localResult.fileName}' has no Google Task ID. Adding to Google Tasks.")
 
-                    // JSTの今日の日付をUTCの00:00:00のRFC3339タイムスタンプとして生成
-                    val dueTime = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                        LocalDate.now(ZoneId.of("Asia/Tokyo"))
-                            .atStartOfDay()
-                            .atOffset(ZoneOffset.UTC)
-                            .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-                    } else {
-                        val jst = java.util.TimeZone.getTimeZone("Asia/Tokyo")
-                        val cal = java.util.Calendar.getInstance(jst)
-                        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
-                        cal.set(java.util.Calendar.MINUTE, 0)
-                        cal.set(java.util.Calendar.SECOND, 0)
-                        cal.set(java.util.Calendar.MILLISECOND, 0)
+                    // Calculate due date if enabled
+                    val dueTime = if (enableDue) calculateDueForToday() else null
 
-                        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
-                        sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                        sdf.format(cal.time)
+                    val taskId = if (useGAS) {
+                        // Use GAS webhook
+                        addTaskViaGAS(
+                            title = localResult.transcription,
+                            notes = localResult.googleTaskNotes,
+                            isCompleted = localResult.isCompleted,
+                            due = dueTime
+                        )
+                    } else {
+                        // Use OAuth
+                        val addedTask = addGoogleTask(
+                            title = localResult.transcription,
+                            notes = localResult.googleTaskNotes,
+                            isCompleted = localResult.isCompleted,
+                            due = dueTime
+                        )
+                        addedTask?.id
                     }
 
-                    val addedTask = addGoogleTask(
-                        title = localResult.transcription,
-                        notes = localResult.googleTaskNotes,
-                        isCompleted = localResult.isCompleted,
-                        due = dueTime
-                    )
-                    if (addedTask != null && addedTask.id != null) {
+                    if (taskId != null) {
                         updatedResults.add(
                             localResult.copy(
-                                googleTaskId = addedTask.id,
-                                isSyncedWithGoogleTasks = true,
-                                googleTaskUpdated = addedTask.updated,
-                                googleTaskDue = addedTask.due, // dueを追加
-                                lastEditedTimestamp = FileUtil.parseRfc3339Timestamp(addedTask.updated)
+                                googleTaskId = taskId,
+                                googleTaskUpdated = java.time.Instant.now().toString(),
+                                googleTaskDue = dueTime,
+                                lastEditedTimestamp = System.currentTimeMillis()
                             )
                         )
-                        logManager.addLog("Added local result '${localResult.fileName}' to Google Tasks. New Google ID: ${addedTask.id}")
+                        logManager.addLog("Added local result '${localResult.fileName}' to Google Tasks. New Google ID: $taskId")
                     } else {
                         logManager.addLog("Failed to add local result '${localResult.fileName}' to Google Tasks. Will retry on next sync.")
-                        updatedResults.add(localResult.copy(isSyncedWithGoogleTasks = false))
-                    }
-                } else {
-                    // This item already exists on Google Tasks, check if it needs an update.
-                    val googleTaskUpdatedTimestamp = FileUtil.parseRfc3339Timestamp(localResult.googleTaskUpdated)
-                    val needsUpdate = !localResult.isSyncedWithGoogleTasks || localResult.lastEditedTimestamp > googleTaskUpdatedTimestamp
-
-                    if (needsUpdate) {
-                        val updatedTask = updateGoogleTask(localResult)
-
-                        if (updatedTask != null) {
-                            val remoteTimestamp = FileUtil.parseRfc3339Timestamp(updatedTask.updated)
-                            // Check if the remote was newer
-                            if (localResult.lastEditedTimestamp < remoteTimestamp) {
-                                logManager.addLog("Updating local task '${localResult.fileName}' with newer remote data.")
-                                updatedResults.add(
-                                    localResult.copy(
-                                        transcription = updatedTask.title ?: "",
-                                        isCompleted = updatedTask.status == "completed",
-                                        googleTaskNotes = updatedTask.notes,
-                                        isSyncedWithGoogleTasks = true,
-                                        googleTaskUpdated = updatedTask.updated,
-                                        googleTaskDue = updatedTask.due, // dueを追加
-                                        lastEditedTimestamp = remoteTimestamp
-                                    )
-                                )
-                            } else {
-                                // Local was newer, and we successfully updated the remote
-                                logManager.addLog("Successfully pushed local changes to Google Task for '${localResult.fileName}'.")
-                                updatedResults.add(
-                                    localResult.copy(
-                                        isSyncedWithGoogleTasks = true,
-                                        googleTaskUpdated = updatedTask.updated,
-                                        googleTaskDue = updatedTask.due, // dueを追加
-                                        lastEditedTimestamp = remoteTimestamp
-                                    )
-                                )
-                            }
-                        } else {
-                            logManager.addLog("Failed to sync Google Task for '${localResult.fileName}'. Will retry on next sync.")
-                            updatedResults.add(localResult.copy(isSyncedWithGoogleTasks = false))
-                        }
-                    } else {
-                        // No changes needed for this item
                         updatedResults.add(localResult)
                     }
+                } else {
+                    // This item already exists on Google Tasks - skip (no updates)
+                    updatedResults.add(localResult)
                 }
             }
 

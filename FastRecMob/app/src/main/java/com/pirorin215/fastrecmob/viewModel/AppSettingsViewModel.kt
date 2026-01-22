@@ -7,6 +7,9 @@ import androidx.lifecycle.viewModelScope
 import com.pirorin215.fastrecmob.data.AppSettingsRepository
 import com.pirorin215.fastrecmob.data.Settings
 import com.pirorin215.fastrecmob.data.TranscriptionProvider
+import com.pirorin215.fastrecmob.data.AIProvider
+import com.pirorin215.fastrecmob.data.ProviderMode
+import com.pirorin215.fastrecmob.data.GeminiModel
 import com.pirorin215.fastrecmob.service.SpeechToTextService
 import com.pirorin215.fastrecmob.service.GroqSpeechService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -63,6 +66,27 @@ class AppSettingsViewModel(
             initialValue = TranscriptionProvider.GOOGLE
         )
 
+    val aiProvider: StateFlow<AIProvider> = appSettingsRepository.getFlow(Settings.AI_PROVIDER)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = AIProvider.GEMINI
+        )
+
+    val providerMode: StateFlow<ProviderMode> = appSettingsRepository.getFlow(Settings.PROVIDER_MODE)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ProviderMode.GCP
+        )
+
+    val geminiModel: StateFlow<GeminiModel> = appSettingsRepository.getFlow(Settings.GEMINI_MODEL)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = GeminiModel()
+        )
+
     val transcriptionCacheLimit: StateFlow<Int> = appSettingsRepository.getFlow(Settings.TRANSCRIPTION_CACHE_LIMIT)
         .stateIn(
             scope = viewModelScope,
@@ -89,6 +113,13 @@ class AppSettingsViewModel(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = "fastrec"
+        )
+
+    val googleTasksMode: StateFlow<com.pirorin215.fastrecmob.data.GoogleTasksMode> = appSettingsRepository.getFlow(Settings.GOOGLE_TASKS_MODE)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = com.pirorin215.fastrecmob.data.GoogleTasksMode.OAUTH
         )
 
     val googleTaskTitleLength: StateFlow<Int> = appSettingsRepository.getFlow(Settings.GOOGLE_TASK_TITLE_LENGTH)
@@ -161,6 +192,20 @@ class AppSettingsViewModel(
             initialValue = false // Default to OFF
         )
 
+    val gasWebhookUrl: StateFlow<String> = appSettingsRepository.getFlow(Settings.GAS_WEBHOOK_URL)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ""
+        )
+
+    val enableGoogleTaskDue: StateFlow<Boolean> = appSettingsRepository.getFlow(Settings.ENABLE_GOOGLE_TASK_DUE)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true // Default to true
+        )
+
     fun saveApiKey(apiKey: String) {
         viewModelScope.launch {
             appSettingsRepository.setValue(Settings.API_KEY, apiKey)
@@ -182,6 +227,35 @@ class AppSettingsViewModel(
     fun saveTranscriptionProvider(provider: TranscriptionProvider) {
         viewModelScope.launch {
             appSettingsRepository.setValue(Settings.TRANSCRIPTION_PROVIDER, provider)
+        }
+    }
+
+    fun saveAIProvider(provider: AIProvider) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.AI_PROVIDER, provider)
+        }
+    }
+
+    fun saveProviderMode(mode: ProviderMode) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.PROVIDER_MODE, mode)
+            // Also update the individual providers to match the mode
+            when (mode) {
+                ProviderMode.GCP -> {
+                    appSettingsRepository.setValue(Settings.TRANSCRIPTION_PROVIDER, TranscriptionProvider.GOOGLE)
+                    appSettingsRepository.setValue(Settings.AI_PROVIDER, AIProvider.GEMINI)
+                }
+                ProviderMode.GROQ -> {
+                    appSettingsRepository.setValue(Settings.TRANSCRIPTION_PROVIDER, TranscriptionProvider.GROQ)
+                    appSettingsRepository.setValue(Settings.AI_PROVIDER, AIProvider.GROQ)
+                }
+            }
+        }
+    }
+
+    fun saveGeminiModel(model: GeminiModel) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.GEMINI_MODEL, model)
         }
     }
 
@@ -208,6 +282,12 @@ class AppSettingsViewModel(
     fun saveGoogleTodoListName(name: String) {
         viewModelScope.launch {
             appSettingsRepository.setValue(Settings.GOOGLE_TODO_LIST_NAME, name)
+        }
+    }
+
+    fun saveGoogleTasksMode(mode: com.pirorin215.fastrecmob.data.GoogleTasksMode) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.GOOGLE_TASKS_MODE, mode)
         }
     }
 
@@ -274,6 +354,18 @@ class AppSettingsViewModel(
     fun saveTranscriptionNotificationEnabled(enabled: Boolean) {
         viewModelScope.launch {
             appSettingsRepository.setValue(Settings.TRANSCRIPTION_NOTIFICATION_ENABLED, enabled)
+        }
+    }
+
+    fun saveGasWebhookUrl(url: String) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.GAS_WEBHOOK_URL, url.trim())
+        }
+    }
+
+    fun saveEnableGoogleTaskDue(enable: Boolean) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.ENABLE_GOOGLE_TASK_DUE, enable)
         }
     }
 

@@ -16,9 +16,12 @@ import com.pirorin215.fastrecmob.data.Settings
 import com.pirorin215.fastrecmob.data.TranscriptionResult
 import com.pirorin215.fastrecmob.data.TranscriptionResultRepository
 import com.pirorin215.fastrecmob.data.TranscriptionProvider
+import com.pirorin215.fastrecmob.data.AIProvider
+import com.pirorin215.fastrecmob.data.ProviderMode
 import com.pirorin215.fastrecmob.service.SpeechToTextService
 import com.pirorin215.fastrecmob.service.GroqSpeechService
 import com.pirorin215.fastrecmob.service.GeminiService
+import com.pirorin215.fastrecmob.service.GroqLLMService
 import com.pirorin215.fastrecmob.data.FileUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +34,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -61,6 +65,7 @@ class TranscriptionManager(
     private var speechToTextService: SpeechToTextService? = null
     private var groqSpeechService: GroqSpeechService? = null
     private var geminiService: GeminiService? = null  // For AI button feature
+    private var groqLLMService: GroqLLMService? = null  // For AI button with Groq
     private var notificationIdCounter = TRANSCRIPTION_NOTIFICATION_ID
 
     private val _transcriptionState = MutableStateFlow("Idle")
@@ -150,13 +155,32 @@ class TranscriptionManager(
 
         // Initialize Gemini service for AI button feature
         appSettingsRepository.getFlow(Settings.GEMINI_API_KEY)
-            .onEach { apiKey ->
+            .combine(appSettingsRepository.getFlow(Settings.GEMINI_MODEL)) { apiKey, model ->
+                Pair(apiKey, model)
+            }
+            .onEach { (apiKey, model) ->
                 if (apiKey.isNotBlank()) {
-                    geminiService = GeminiService(context, apiKey)
-                    logManager.addDebugLog("Gemini service initialized")
+                    geminiService = GeminiService(context, apiKey, model.modelName)
+                    logManager.addDebugLog("Gemini service initialized with model: ${model.modelName}")
                 } else {
                     geminiService = null
                     logManager.addDebugLog("Gemini service cleared: no API key")
+                }
+            }
+            .launchIn(scope)
+
+        // Initialize Groq LLM service for AI button feature
+        appSettingsRepository.getFlow(Settings.AI_PROVIDER)
+            .combine(appSettingsRepository.getFlow(Settings.GROQ_API_KEY)) { provider, groqApiKey ->
+                Pair(provider, groqApiKey)
+            }
+            .onEach { (provider, groqApiKey) ->
+                if (provider == AIProvider.GROQ && groqApiKey.isNotBlank()) {
+                    groqLLMService = GroqLLMService(context, groqApiKey)
+                    logManager.addDebugLog("Groq LLM service initialized")
+                } else {
+                    groqLLMService = null
+                    logManager.addDebugLog("Groq LLM service cleared")
                 }
             }
             .launchIn(scope)
@@ -297,22 +321,27 @@ class TranscriptionManager(
             val cleanTitle = rawTitle.replace("\n", "")
             val title = if (cleanTitle.isBlank()) "Transcription" else cleanTitle
 
-            // For AI mode, process with Gemini
+            // For AI mode, process with selected AI provider
             var aiResponse: String? = null
             var finalNotes: String? = null
             var notificationText = fullTranscription  // Default notification text
 
             if (recordingType == "AI") {
-                logManager.addDebugLog("AI mode detected, calling Gemini service...")
-                val geminiResult = geminiService?.generateResponse(fullTranscription)
+                val aiProvider = appSettingsRepository.getFlow(Settings.AI_PROVIDER).first()
+                logManager.addDebugLog("AI mode detected, calling $aiProvider service...")
 
-                geminiResult?.onSuccess { response ->
+                val aiResult = when (aiProvider) {
+                    AIProvider.GEMINI -> geminiService?.generateResponse(fullTranscription)
+                    AIProvider.GROQ -> groqLLMService?.generateResponse(fullTranscription)
+                }
+
+                aiResult?.onSuccess { response ->
                     aiResponse = response
                     finalNotes = response  // AI response goes to notes
                     notificationText = response  // Show AI response in notification
-                    logManager.addDebugLog("Gemini response received: ${response.take(50)}...")
+                    logManager.addDebugLog("$aiProvider response received: ${response.take(50)}...")
                 }?.onFailure { error ->
-                    logManager.addLog("Gemini API failed: ${error.message}", LogLevel.ERROR)
+                    logManager.addLog("$aiProvider API failed: ${error.message}", LogLevel.ERROR)
                     // AI失敗を明示的に記録
                     aiResponse = null
                     val errorMessage = "AI応答の生成に失敗しました: ${error.message}"
@@ -476,7 +505,10 @@ class TranscriptionManager(
             }
 
             logManager.addDebugLog("Marking as PENDING: ${result.fileName}")
-            val pendingResult = result.copy(transcriptionStatus = "PENDING")
+            val pendingResult = result.copy(
+                transcriptionStatus = "PENDING",
+                googleTaskId = null  // Clear to force new task creation on retranscription
+            )
             transcriptionResultRepository.addResult(pendingResult)
 
             // Immediately trigger processing

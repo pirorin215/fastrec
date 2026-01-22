@@ -245,14 +245,14 @@ fun TranscriptionResultItem(
         isSelected -> MaterialTheme.colorScheme.primaryContainer
         result.transcriptionStatus == "PENDING" -> MaterialTheme.colorScheme.surfaceVariant
         result.transcriptionStatus == "FAILED" -> MaterialTheme.colorScheme.errorContainer
-        result.isSyncedWithGoogleTasks -> MaterialTheme.colorScheme.surfaceVariant // Synced items
+        result.googleTaskId != null -> MaterialTheme.colorScheme.surfaceVariant // Synced items
         else -> MaterialTheme.colorScheme.surface
     }
     val contentColor = when {
         isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
         result.transcriptionStatus == "PENDING" -> MaterialTheme.colorScheme.onSurfaceVariant
         result.transcriptionStatus == "FAILED" -> MaterialTheme.colorScheme.onErrorContainer
-        result.isSyncedWithGoogleTasks -> MaterialTheme.colorScheme.onSurfaceVariant // Synced items
+        result.googleTaskId != null -> MaterialTheme.colorScheme.onSurfaceVariant // Synced items
         else -> MaterialTheme.colorScheme.onSurface
     }
 

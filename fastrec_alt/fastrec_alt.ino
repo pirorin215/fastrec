@@ -88,9 +88,11 @@ void goDeepSleep() {
   digitalWrite(MOTOR_GPIO, LOW);
 
   // 録音開始や録音停止ボタンを押したらディープスリープ復帰するコード
-  esp_sleep_enable_ext1_wakeup_io(BUTTON_PIN_BITMASK(REC_BUTTON_GPIO), ESP_EXT1_WAKEUP_ANY_HIGH);
+  esp_sleep_enable_ext1_wakeup_io(BUTTON_PIN_BITMASK(REC_BUTTON_GPIO) | BUTTON_PIN_BITMASK(AI_BUTTON_GPIO), ESP_EXT1_WAKEUP_ANY_HIGH);
   rtc_gpio_pulldown_en(REC_BUTTON_GPIO);
   rtc_gpio_pullup_dis(REC_BUTTON_GPIO);
+  rtc_gpio_pulldown_en(AI_BUTTON_GPIO);
+  rtc_gpio_pullup_dis(AI_BUTTON_GPIO);
 
   //esp_sleep_enable_ext1_wakeup_io(BUTTON_PIN_BITMASK(USB_DETECT_PIN), ESP_EXT1_WAKEUP_ANY_HIGH);
   //rtc_gpio_pulldown_en(USB_DETECT_PIN);
@@ -467,6 +469,15 @@ void wakeupLogic() {
       if (wakeup_pin_mask & BUTTON_PIN_BITMASK(REC_BUTTON_GPIO)) {
         if (digitalRead(REC_BUTTON_GPIO) == HIGH) { // If button is currently pressed
             g_enable_logging = false;
+            g_is_ai_recording = false;
+            startRecording();
+        } else {
+            g_enable_logging = true;
+        }
+      } else if (wakeup_pin_mask & BUTTON_PIN_BITMASK(AI_BUTTON_GPIO)) {
+        if (digitalRead(AI_BUTTON_GPIO) == HIGH) { // If button is currently pressed
+            g_enable_logging = false;
+            g_is_ai_recording = true;
             startRecording();
         } else {
             g_enable_logging = true;

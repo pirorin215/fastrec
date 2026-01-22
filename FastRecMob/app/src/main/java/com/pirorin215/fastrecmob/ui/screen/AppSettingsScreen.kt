@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
@@ -43,6 +44,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import com.pirorin215.fastrecmob.data.ThemeMode
 import com.pirorin215.fastrecmob.data.TranscriptionProvider
+import com.pirorin215.fastrecmob.data.AIProvider
+import com.pirorin215.fastrecmob.data.ProviderMode
+import com.pirorin215.fastrecmob.data.GeminiModel
 import com.pirorin215.fastrecmob.viewModel.AppSettingsViewModel
 import kotlin.math.roundToInt
 
@@ -58,6 +62,9 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
     val currentGeminiApiKey by appSettingsViewModel.geminiApiKey.collectAsState()
     val currentGroqApiKey by appSettingsViewModel.groqApiKey.collectAsState()
     val currentTranscriptionProvider by appSettingsViewModel.transcriptionProvider.collectAsState()
+    val currentAIProvider by appSettingsViewModel.aiProvider.collectAsState()
+    val currentProviderMode by appSettingsViewModel.providerMode.collectAsState()
+    val currentGeminiModel by appSettingsViewModel.geminiModel.collectAsState()
     val currentTranscriptionCacheLimit by appSettingsViewModel.transcriptionCacheLimit.collectAsState() // Renamed
     val currentFontSize by appSettingsViewModel.transcriptionFontSize.collectAsState()
     val currentThemeMode by appSettingsViewModel.themeMode.collectAsState()
@@ -75,6 +82,9 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
     var geminiApiKeyText by remember(currentGeminiApiKey) { mutableStateOf(currentGeminiApiKey) }
     var groqApiKeyText by remember(currentGroqApiKey) { mutableStateOf(currentGroqApiKey) }
     var selectedTranscriptionProvider by remember(currentTranscriptionProvider) { mutableStateOf(currentTranscriptionProvider) }
+    var selectedAIProvider by remember(currentAIProvider) { mutableStateOf(currentAIProvider) }
+    var selectedProviderMode by remember(currentProviderMode) { mutableStateOf(currentProviderMode) }
+    var selectedGeminiModel by remember(currentGeminiModel) { mutableStateOf(currentGeminiModel) }
     var transcriptionCacheLimitText by remember(currentTranscriptionCacheLimit) { mutableStateOf(currentTranscriptionCacheLimit.toString()) } // Renamed
     var fontSizeSliderValue by remember(currentFontSize) { mutableStateOf(currentFontSize.toFloat()) }
     var selectedThemeMode by remember(currentThemeMode) { mutableStateOf(currentThemeMode) }
@@ -91,7 +101,8 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
         appSettingsViewModel.saveApiKey(apiKeyText)
         appSettingsViewModel.saveGeminiApiKey(geminiApiKeyText)
         appSettingsViewModel.saveGroqApiKey(groqApiKeyText)
-        appSettingsViewModel.saveTranscriptionProvider(selectedTranscriptionProvider)
+        appSettingsViewModel.saveProviderMode(selectedProviderMode)
+        appSettingsViewModel.saveGeminiModel(selectedGeminiModel)
         val transcriptionCacheLimit = transcriptionCacheLimitText.toIntOrNull() ?: 100
         appSettingsViewModel.saveTranscriptionCacheLimit(transcriptionCacheLimit)
         appSettingsViewModel.saveTranscriptionFontSize(fontSizeSliderValue.roundToInt())
@@ -135,68 +146,161 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
+            // Provider Mode Selection - 一番上に移動
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "GCP",
+                    fontSize = 16.sp,
+                    color = if (selectedProviderMode == ProviderMode.GCP) {
+                        androidx.compose.material3.MaterialTheme.colorScheme.primary
+                    } else {
+                        androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                Switch(
+                    checked = selectedProviderMode == ProviderMode.GROQ,
+                    onCheckedChange = { checked ->
+                        selectedProviderMode = if (checked) ProviderMode.GROQ else ProviderMode.GCP
+                    },
+                    colors = SwitchDefaults.colors()
+                )
+                Text(
+                    text = "Groq",
+                    fontSize = 16.sp,
+                    color = if (selectedProviderMode == ProviderMode.GROQ) {
+                        androidx.compose.material3.MaterialTheme.colorScheme.primary
+                    } else {
+                        androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = when (selectedProviderMode) {
+                    ProviderMode.GCP -> "文字起こし: Google、AI応答: Gemini"
+                    ProviderMode.GROQ -> "文字起こし: Whisper、AI応答: Llama 3.1"
+                },
+                fontSize = 12.sp,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
             OutlinedTextField(
                 value = apiKeyText,
                 onValueChange = { apiKeyText = it },
                 label = { Text(stringResource(R.string.google_api_key_label)) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = selectedProviderMode == ProviderMode.GCP
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = geminiApiKeyText,
                 onValueChange = { geminiApiKeyText = it },
                 label = { Text("Gemini API Key") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = selectedProviderMode == ProviderMode.GCP
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = groqApiKeyText,
                 onValueChange = { groqApiKeyText = it },
                 label = { Text("Groq API Key") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = selectedProviderMode == ProviderMode.GROQ
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Transcription Provider Selection
-            Text("文字起こしプロバイダー")
-            Spacer(modifier = Modifier.height(8.dp))
-            Column {
-                // Google
+            // Gemini Model Selection (only show when GCP is selected)
+            if (selectedProviderMode == ProviderMode.GCP) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    RadioButton(
-                        selected = selectedTranscriptionProvider == TranscriptionProvider.GOOGLE,
-                        onClick = { selectedTranscriptionProvider = TranscriptionProvider.GOOGLE },
-                        colors = RadioButtonDefaults.colors(
-                            selectedColor = androidx.compose.material3.MaterialTheme.colorScheme.primary
-                        )
-                    )
+                    Text("Geminiモデル", fontSize = 16.sp)
                     Text(
-                        text = "Google Cloud Speech-to-Text",
-                        modifier = Modifier.padding(start = 8.dp)
+                        text = selectedGeminiModel.modelName,
+                        fontSize = 14.sp,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.primary
                     )
                 }
-                // Groq
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    RadioButton(
-                        selected = selectedTranscriptionProvider == TranscriptionProvider.GROQ,
-                        onClick = { selectedTranscriptionProvider = TranscriptionProvider.GROQ },
-                        colors = RadioButtonDefaults.colors(
-                            selectedColor = androidx.compose.material3.MaterialTheme.colorScheme.primary
-                        )
-                    )
-                    Text(
-                        text = "Groq (Whisper)",
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Version input and checkboxes in a single row
+                var geminiVersionText by remember(selectedGeminiModel.version) {
+                    mutableStateOf(selectedGeminiModel.version.toString())
                 }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = geminiVersionText,
+                        onValueChange = { newText ->
+                            geminiVersionText = newText
+                            val version = newText.toFloatOrNull()
+                            if (version != null && version > 0) {
+                                selectedGeminiModel = selectedGeminiModel.copy(version = version)
+                            }
+                        },
+                        label = { Text("バージョン") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.width(100.dp),
+                        singleLine = true
+                    )
+
+                    // Flash checkbox
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.Checkbox(
+                            checked = selectedGeminiModel.hasFlash,
+                            onCheckedChange = { checked ->
+                                selectedGeminiModel = selectedGeminiModel.copy(
+                                    hasFlash = checked,
+                                    // flashがオフになったらliteもオフにする
+                                    hasLite = if (!checked) false else selectedGeminiModel.hasLite
+                                )
+                            }
+                        )
+                        Text(
+                            text = "flash",
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
+
+                    // Lite checkbox (flashが有効な時のみ選択可能)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.Checkbox(
+                            checked = selectedGeminiModel.hasLite,
+                            onCheckedChange = { checked ->
+                                // flashが有効な時のみliteを有効にできる
+                                if (selectedGeminiModel.hasFlash) {
+                                    selectedGeminiModel = selectedGeminiModel.copy(hasLite = checked)
+                                }
+                            },
+                            enabled = selectedGeminiModel.hasFlash
+                        )
+                        Text(
+                            text = "lite",
+                            modifier = Modifier.padding(start = 4.dp),
+                            color = if (selectedGeminiModel.hasFlash) {
+                                androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+                            } else {
+                                androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
-            Spacer(modifier = Modifier.height(8.dp))
+
             OutlinedTextField(
                 value = transcriptionCacheLimitText, // Renamed
                 onValueChange = { transcriptionCacheLimitText = it },
