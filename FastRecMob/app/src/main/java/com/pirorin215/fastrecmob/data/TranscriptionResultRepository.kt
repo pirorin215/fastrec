@@ -32,7 +32,6 @@ data class TranscriptionResult(
     val googleTaskPosition: String? = null,
     val googleTaskDue: String? = null, // RFC 3339 timestamp
     val googleTaskWebViewLink: String? = null,
-    val isSyncedWithGoogleTasks: Boolean = false,
     val isDeletedLocally: Boolean = false, // New field for soft deletion
     val transcriptionStatus: String = "COMPLETED", // PENDING, COMPLETED, FAILED
     // New fields for AI button feature
@@ -58,7 +57,6 @@ data class TranscriptionResult(
         googleTaskPosition = null,
         googleTaskDue = null,
         googleTaskWebViewLink = null,
-        isSyncedWithGoogleTasks = false,
         isDeletedLocally = false, // Default for new field
         transcriptionStatus = "COMPLETED",
         // Default values for new AI fields

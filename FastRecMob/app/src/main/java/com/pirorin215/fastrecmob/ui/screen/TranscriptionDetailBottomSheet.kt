@@ -204,7 +204,7 @@ fun TranscriptionDetailBottomSheet(
                     result.googleTaskWebViewLink?.let {
                         Text("Web Link: $it", style = MaterialTheme.typography.bodySmall)
                     }
-                    Text("Synced: ${result.isSyncedWithGoogleTasks}", style = MaterialTheme.typography.bodySmall)
+                    Text("Synced: ${result.googleTaskId != null}", style = MaterialTheme.typography.bodySmall)
                 }
                 Spacer(Modifier.height(16.dp))
             }

@@ -16,8 +16,10 @@ FastRecは以下のコンポーネントで構成されるポータブル録音�
 
 ## ✨ 特徴
 
+- **🎯 短い音声メモに特化**: 10秒前後のtodo作成用途に最適化（議事録や長時間録音には向きません）
+- **物理ボタンで直感的操作**: ボタンを押している間だけ録音するシンプルな操作
 - **複数の文字起こしプロバイダー対応**: Google Cloud Speech-to-Text または Groq (Whisper) を選択可能
-- **AIボタン**: Gemini APIで録音内容に対するAI応答を生成
+- **AIボタン**: 録音内容に対するAI応答を生成（Groq使用時はGroq、それ以外の場合はGemini APIで応答生成）
 - **ワイヤレス転送**: 録音データをBLE経由でスマホに転送
 - **Tasks連携**: 文字起こし結果をGoogle Tasksに自動登録
   - 通常録音: タイトルに文字起こし、詳細に全文
@@ -46,17 +48,6 @@ FastRecは以下のコンポーネントで構成されるポータブル録音�
 - Arduino IDE 2.x または PlatformIO
 - ESP32-S3 ボードサポートパッケージ
 - Python 3.x（bletool.py使用時）
-
-## 🏗️ プロジェクト構成
-
-```
-fastrec/
-├── FastRecMob/      # Androidアプリ
-├── fastrec_alt/     # ESP32-S3ファームウェア
-├── docs/            # 詳細ドキュメント
-├── hardware/        # 回路図・部品表
-└── images/          # スクリーンショット・接続図
-```
 
 ## 🔧 セットアップ
 
@@ -145,97 +136,177 @@ Arduino IDE 2.xを使用する場合:
 
 **補足**: CLIでのビルドも可能です（`fastrec_alt/compile.sh`, `fastrec_alt/upload.sh`）
 
+## 🔌 初期設定
+
+セットアップ完了後、初回使用時に以下の設定を行います。
+
+**いずれかの方式を選択してください**（推奨: Groq + GAS方式）
+
+### 共通設定：BLEペアリング
+
+- ESP32の電源を入れる
+- Androidアプリで「スキャン」をタップ
+- `FastRec-XXXX` をタップして接続
+
+---
+
+### 推奨：Groq + GAS方式
+
+Groq APIを使用した最も簡単な設定方式です。文字起こしもAI応答もGroqで処理され、Google Tasks連携にはGAS方式を使用します。
+
+#### 1. Groq API設定
+
+- [Groq Console](https://console.groq.com/) にアクセス
+- アカウントを作成またはログイン
+- 左側メニューから「API Keys」を選択
+- 「Create API Key」をクリックしてAPIキーを取得
+- Androidアプリの設定画面で:
+  - 「文字起こしプロバイダー」で「Groq (Whisper)」を選択
+  - 「Groq API Key」にAPIキーを入力
+
+**料金について（2025年1月時点）**:
+- Groqは現在**非常に寛大な無料枠**を提供しています
+- 個人利用であれば、まず無料枠で十分です
+- 詳細: [Groq Pricing](https://groq.com/pricing/)
+
+**推奨モデル**:
+- `whisper-large-v3-turbo`: 高速かつ高精度な文字起こし
+- 日本語対応で優れた認識精度
+
+#### 2. GAS方式の設定（Google Tasks連携）
+
+GCPプロジェクトの作成やOAuth設定が不要な設定方式です。詳細: [docs/gas_setup.md](docs/gas_setup.md)
+
+---
+
+### 代替：GCP方式
+
+Google Cloud Platformを既に利用しているユーザー向けの設定方式です。
+
+#### 1. Google Cloud Speech-to-Text設定
+
+- [Google Cloud Console](https://console.cloud.google.com) でAPIキーを取得
+- Androidアプリの設定画面でAPIキーを入力
+
+#### 2. Gemini API設定（AIボタン使用時）
+
+AIボタンを使用してAI応答を生成する場合に必要です。
+
+- [Google AI Studio](https://aistudio.google.com/app/api-keys) にアクセス
+- Googleアカウントでログイン（まだの場合はログインしてください）
+- **初回のみ**: 利用規約が表示されるので「同意する」をクリック
+- 「Create API Key」ボタンをクリック
+- **Google Cloudプロジェクトの作成/選択**:
+  - 「Create a new Google Cloud project」を選択
+  - プロジェクト名を入力（任意、例: `FastRec-Gemini`）
+  - 「Create」ボタンをクリック
+- APIキーが自動生成されるので、コピー
+
+- **重要 - 請求先アカウントのリンク（必須）**:
+  - APIキー画面で、作成したAPIキーの右側にある「お支払い情報を設定」をクリック
+  - Google Cloud Consoleに自動的に遷移します
+  - 「このプロジェクトには請求先アカウントがありません」と表示されます
+  - 「請求先アカウントをリンク」をクリック
+  - 既存の請求先アカウントを選択するか、新しい請求先アカウントを作成
+    - 新規作成の場合：
+      - 国/地域を選択（「日本」など）
+      - プロフィール情報を入力
+      - お支払い方法を登録（クレジットカード等）
+  - 「リンク」または「アカウントを設定」をクリック
+  - 請求先アカウントがリンクされたことを確認
+  - [Google AI Studio](https://aistudio.google.com/app/api-keys) に戻り、APIキーが有効になっていることを確認
+
+- Androidアプリの設定画面で「Gemini API Key」に入力
+
+**重要 - 予算上限の設定（推奨）**:
+
+Gemini API は従量課金ですが、無料枠を使い切ると有料になります。予期せぬ課金を防ぐため、予算上限を設定することを強く推奨します。
+
+**予算上限設定手順**:
+1. [Google Cloud Console - 請求先アカウント](https://console.cloud.google.com/billing) にアクセス
+2. 該当の請求先アカウントがリンクされていることを確認
+3. 左側メニューから「お支払い」→「予算とアラート」を選択
+4. 「予算を設定」をクリック
+5. 予算金額を入力（例: 500円）
+6. 予算に達した時のアクションを選択:
+   - メール通知を受け取る（推奨）
+   - API を無効にする（強く推奨）
+7. 「保存」をクリック
+
+**料金目安（2025年1月時点）**:
+- Gemini 2.0 Flash: 個人利用で月額 **100円〜200円程度**（使用頻度によります）
+- 詳細: [Google AI Pricing](https://ai.google.dev/pricing)
+
+**注意**: AIボタンを使用するには、請求先アカウントの設定と予算上限の設定が推奨されます。設定しない場合、無制限に課金される可能性があります。
+
+#### 3. Google Sign-In設定（Google Tasks連携）
+
+Google Tasks APIを使用してGoogle Tasks連携を行う場合に必要です。
+
+1. **GCPプロジェクトでOAuth同意画面を設定**
+   - [Google Cloud Console](https://console.cloud.google.com) でプロジェクトを選択
+   - 「APIとサービス」→「OAuth同意画面」を選択
+   - 「外部」を選択して「作成」をクリック
+   - 必要な情報を入力（アプリ名、ユーザーサポートメールなど）
+   - 「保存して次へ」をクリック
+   - スコープの追加は不要（「保存して次へ」をクリック）
+   - テストユーザーの追加は不要（「保存して次へ」をクリック）
+
+2. **OAuth 2.0クライアントIDを作成**
+   - 「APIとサービス」→「認証情報」を選択
+   - 「認証情報を作成」→「OAuthクライアントID」をクリック
+   - アプリケーションの種類で「Android」を選択
+   - 以下の情報を入力:
+     - **パッケージ名**: `com.pirorin215.fastrecmob`
+     - **SHA-1証明書フィンガプリント**: Androidアプリの署名証明書のSHA-1フィンガプリント
+       - デバッグ版: `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android`
+       - リリース版: アプリの署名時に使用したキーストアのSHA-1フィンガプリント
+   - 「作成」をクリック
+   - 表示されるクライアントIDをコピー（ただし、Androidアプリでは自動的に検出されます）
+
+3. **AndroidアプリでGoogle Sign-In**
+   - FastRecアプリで「Google Tasks同期設定」を開く
+   - 「Google Tasks にサインイン」をタップ
+   - Googleアカウントを選択してサインイン
+   - サインインが完了すると、Google Tasksとの同期が可能になります
+
 ## 📖 使い方
 
-### 基本的な使用手順
+初期設定が完了したら、以下の手順で録音します。
 
-1. **ハードウェアの準備**
-   - [hardware/parts.md](hardware/parts.md) を参照してデバイスを組み立てる
+### 通常録音
 
-2. **ファームウェアの書き込み**
-   - Arduino IDE または CLI でファームウェアを書き込む
+1. **録音ボタン（REC）**を押しつづける
+2. 録音レコーダが振動する
+3. 喋る
+4. ボタンを離す
 
-3. **Androidアプリのインストール**
-   - APKをインストールまたは Android Studio でビルド
+自動的に以下が行われます：
+- Androidアプリにデータ転送
+- 音声認識・文字起こし
+- Google Tasksに登録（タイトル: 文字起こし、詳細: 全文）
 
-4. **BLEペアリング**
-   - ESP32の電源を入れる
-   - Androidアプリで「スキャン」をタップ
-   - `FastRec-XXXX` をタップして接続
+### AI録音
 
-5. **Google Cloud Speech API設定**
-   - [Google Cloud Console](https://console.cloud.google.com) でAPIキーを取得
-   - Androidアプリの設定画面でAPIキーを入力
+AIボタンを使用すると、AIによる応答付きでタスク登録されます。
 
-6. **Gemini API設定（AIボタン使用時）**
-   - [Google AI Studio](https://aistudio.google.com/app/apikeys) にアクセス
-   - Googleアカウントでログイン（まだの場合はログインしてください）
-   - **初回のみ**: 利用規約が表示されるので「同意する」をクリック
-   - 「Create API Key」ボタンをクリック
-   - **Google Cloudプロジェクトの作成/選択**:
-     - 「Create a new Google Cloud project」を選択
-     - プロジェクト名を入力（任意、例: `FastRec-Gemini`）
-     - 「Create」ボタンをクリック
-   - APIキーが自動生成されるので、コピー
-   - Androidアプリの設定画面で「Gemini API Key」に入力
+1. **AIボタン**を押しつづける
+2. 録音レコーダが振動する
+3. 喋る
+4. ボタンを離す
 
-   **重要 - 予算上限の設定（推奨）**:
+自動的に以下が行われます：
+- Androidアプリにデータ転送
+- 音声認識・文字起こし
+- **AIによる応答を生成**
+  - 文字起こしプロバイダーがGroqの場合: Groqで応答生成
+  - 文字起こしプロバイダーがGoogle Cloud Speech-to-TextまたはGAS方式の場合: Gemini APIで応答生成
+- Google Tasksに登録（タイトル: 文字起こし、詳細: AI応答）
+- 通知にはAI応答が表示されます
 
-   Gemini API は従量課金ですが、無料枠を使い切ると有料になります。予期せぬ課金を防ぐため、予算上限を設定することを強く推奨します。
-
-   **予算上限設定手順**:
-   1. [Google Cloud Console - 請求先アカウント](https://console.cloud.google.com/billing) にアクセス
-   2. 該求先アカウントがリンクされていることを確認
-   3. 左側メニューから「お支払い」→「予算とアラート」を選択
-   4. 「予算を設定」をクリック
-   5. 予算金額を入力（例: 500円）
-   6. 予算に達した時のアクションを選択:
-      - メール通知を受け取る（推奨）
-      - API を無効にする（強く推奨）
-   7. 「保存」をクリック
-
-   **料金目安（2025年1月時点）**:
-   - Gemini 2.0 Flash: 個人利用で月額 **100円〜200円程度**（使用頻度によります）
-   - 詳細: [Google AI Pricing](https://ai.google.dev/pricing)
-
-   **注意**: AIボタンを使用するには、請求先アカウントの設定と予算上限の設定が推奨されます。設定しない場合、無制限に課金される可能性があります。
-
-7. **録音・転送・文字起こし**
-   - **通常録音ボタン（RECボタン）**:
-     - ボタンを押している間録音
-     - Androidアプリでデータ転送
-     - 自動で音声認識・文字起こし
-     - Google Tasksに登録（タイトル: 文字起こし、詳細: 全文）
-
-   - **AIボタン（AIボタン）**:
-     - ボタンを押している間録音
-     - Androidアプリでデータ転送
-     - 音声認識後、**Gemini APIでAI応答を生成**
-     - Google Tasksに登録（タイトル: 文字起こし、詳細: AI応答）
-     - 通知にはAI応答が表示されます
-
-   **注意**: AIボタンを使用するには事前にGemini APIキーの設定が必要です
-
-6. **Groq API設定（文字起こしプロバイダーとしてGroqを選択時）**
-   - [Groq Console](https://console.groq.com/) にアクセス
-   - 「Sign up」でアカウント作成、または「Log in」でログイン
-   - 左側メニューから「API Keys」を選択
-   - 「Create API Key」をクリック
-   - APIキー名を入力（任意、例: `FastRec`）
-   - 「Create」ボタンをクリック
-   - 表示されるAPIキーをコピー
-   - Androidアプリの設定画面で:
-     - 「文字起こしプロバイダー」で「Groq (Whisper)」を選択
-     - 「Groq API Key」にAPIキーを入力
-
-   **料金について（2025年1月時点）**:
-   - Groqは現在**非常に寛大な無料枠**を提供しています
-   - 個人利用であれば、まず無料枠で十分です
-   - 詳細: [Groq Pricing](https://groq.com/pricing/)
-
-   **推奨モデル**:
-   - `whisper-large-v3-turbo`: 高速かつ高精度な文字起こし
-   - 日本語対応で優れた認識精度
+**注意**: AIボタンを使用するには、事前にAI応答生成用のAPI設定が必要です：
+- Groqを文字起こしプロバイダーとして選択している場合: 追加の設定は不要（Groq APIキーで完結）
+- Google Cloud Speech-to-TextまたはGAS方式の場合: Gemini APIキーの設定が必要
 
 ![Androidアプリのスクリーンショット](images/app_screenshot.png)
 *(画像: アプリ画面 - 準備中)*
@@ -247,12 +318,16 @@ Arduino IDE 2.xを使用する場合:
 - [システムアーキテクチャ](docs/architecture.md)
 - [部品表・接続ガイド](hardware/parts.md)
 - [トラブルシューティング](docs/troubleshooting.md)
+- [Google Apps Script (GAS) でGoogle Tasks連携](docs/gas_setup.md)
 
 ## 🔧 既知の問題・制限事項
 
 - Android 12以降でのBLE接続制限があります
 - 音声認識にはネットワーク接続が必要です
 - Google Cloud Speech API の利用制限に注意してください
+- **Google Tasks連携**:
+  - 新規タスクの追加のみ対応（更新・削除はできません）
+  - 再文字起こし時は、新しいタスクとして再登録されます
 - Groq API（文字起こしプロバイダーとして選択時）:
   - 現在は寛大な無料枠がありますが、将来の変更には注意してください
   - 詳細: [Groq Pricing](https://groq.com/pricing/)

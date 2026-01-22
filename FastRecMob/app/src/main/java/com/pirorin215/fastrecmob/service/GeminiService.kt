@@ -11,7 +11,8 @@ import kotlinx.coroutines.withContext
  */
 class GeminiService(
     private val context: Context,
-    private val apiKey: String
+    private val apiKey: String,
+    private val modelName: String = "gemini-2.0-flash"
 ) {
     private var generativeModel: GenerativeModel? = null
 
@@ -19,7 +20,7 @@ class GeminiService(
         if (apiKey.isNotBlank()) {
             try {
                 generativeModel = GenerativeModel(
-                    modelName = "gemini-1.5-flash",
+                    modelName = modelName,
                     apiKey = apiKey
                 )
             } catch (e: Exception) {

@@ -63,7 +63,7 @@ class MainViewModel(
     val transcriptionResults: StateFlow<List<TranscriptionResult>> = transcriptionResultRepository.transcriptionResultsFlow
         .map { list -> list.filter { !it.isDeletedLocally } }
         .combine(showCompletedGoogleTasks) { list, showCompleted ->
-            if (showCompleted) list else list.filter { !it.isSyncedWithGoogleTasks || it.transcriptionStatus == "FAILED" }
+            if (showCompleted) list else list.filter { it.googleTaskId == null || it.transcriptionStatus == "FAILED" }
         }
         .map { list -> list.sortedByDescending { com.pirorin215.fastrecmob.data.FileUtil.getTimestampFromFileName(it.fileName) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
