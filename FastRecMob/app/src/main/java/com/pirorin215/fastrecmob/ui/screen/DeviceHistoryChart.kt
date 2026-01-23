@@ -329,14 +329,10 @@ fun DeviceHistoryChart(
             emptyList()
         }
 
-        // 各サイクルのトレンドライン用のlineSpec（異なる色を付ける）
+        // 各サイクルのトレンドライン用のlineSpec（緑と黄色の交互）
         val trendLineColors = listOf(
             Color(0xFF00FF00),  // 緑
-            Color(0xFFFFFF00),  // 黄色
-            Color(0xFFFF00FF),  // マゼンタ
-            Color(0xFF00FFFF),  // シアン
-            Color(0xFFFF8800),  // オレンジ
-            Color(0xFF8800FF)   // 紫
+            Color(0xFFFFFF00)   // 黄色
         )
         val trendLineSpecs = trendLinesPerCycle.mapIndexed { index, _ ->
             val color = trendLineColors[index % trendLineColors.size]

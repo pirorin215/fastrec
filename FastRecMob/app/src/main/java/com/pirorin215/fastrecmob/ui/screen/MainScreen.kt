@@ -185,7 +185,7 @@ fun MainScreen(
                                     },
                                     modifier = Modifier.size(32.dp)
                                 ) {
-                                    Icon(Icons.Default.LocationOn, contentDescription = stringResource(R.string.show_device_history_content_description))
+                                    Icon(Icons.Default.ShowChart, contentDescription = stringResource(R.string.show_device_history_content_description))
                                 }
                             }
                         },

@@ -319,7 +319,23 @@ class TranscriptionManager(
 
             val rawTitle = fullTranscription.take(googleTaskTitleLength)
             val cleanTitle = rawTitle.replace("\n", "")
-            val title = if (cleanTitle.isBlank()) "Transcription" else cleanTitle
+
+            // 空文字（ハルシネーション）の場合はエラーとして扱う
+            if (cleanTitle.isBlank()) {
+                logManager.addLog("Transcription failed: Empty result (likely hallucination)", LogLevel.ERROR)
+                val errorResult = resultToProcess.copy(
+                    transcription = "文字起こしエラー",
+                    locationData = locationData ?: resultToProcess.locationData,
+                    transcriptionStatus = "FAILED",
+                    recordingType = recordingType
+                )
+                transcriptionResultRepository.addResult(errorResult)
+                // Notify that processing for this file is complete
+                scope.launch { _transcriptionCompletedFlow.emit(resultToProcess.fileName) }
+                return@onSuccess
+            }
+
+            val title = cleanTitle
 
             // For AI mode, process with selected AI provider
             var aiResponse: String? = null
