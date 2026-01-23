@@ -75,6 +75,7 @@ class GroqSpeechService(private val context: Context, private val apiKey: String
                     )
                     .addFormDataPart("model", "whisper-large-v3-turbo")
                     .addFormDataPart("language", "ja")
+                    .addFormDataPart("prompt", "これは短い音声メモです。聞き取れない場合は何も出力しないでください。")
                     .addFormDataPart("response_format", "text")
                     .build()
 
@@ -92,9 +93,14 @@ class GroqSpeechService(private val context: Context, private val apiKey: String
                 }
 
                 val transcription = response.body?.string() ?: ""
+                val trimmed = transcription.trim()
 
-                if (transcription.isNotBlank()) {
-                    Result.success(transcription.trim())
+                if (trimmed.isNotBlank()) {
+                    if (isHallucination(trimmed)) {
+                        Result.success("")
+                    } else {
+                        Result.success(trimmed)
+                    }
                 } else {
                     Result.failure(Exception("Transcription result is empty."))
                 }
@@ -170,6 +176,7 @@ class GroqSpeechService(private val context: Context, private val apiKey: String
                     )
                     .addFormDataPart("model", "whisper-large-v3-turbo")
                     .addFormDataPart("language", "en")
+                    .addFormDataPart("prompt", "This is a short voice note. If you cannot hear anything, do not output anything.")
                     .addFormDataPart("response_format", "text")
                     .build()
 
@@ -195,6 +202,51 @@ class GroqSpeechService(private val context: Context, private val apiKey: String
             } catch (e: Exception) {
                 e.printStackTrace()
                 Result.failure(e)
+            }
+        }
+    }
+
+    companion object {
+        private val HALLUCINATION_PHRASES = listOf(
+            "ご視聴ありがとうございました",
+            "視聴ありがとうございました",
+            "ご視聴いただきありがとうございました",
+            "チャンネル登録",
+            "高評価",
+            "チャンネル登録よろしくお願いします",
+            "高評価よろしくお願いします",
+            "Thanks for watching",
+            "Thank you for watching",
+            "Please subscribe",
+            "Subtitles by",
+            "Subtitle by"
+        )
+
+        internal fun isHallucination(text: String): Boolean {
+            val normalized = text.trim()
+                .lowercase()
+                .replace(Regex("^[（(]"), "")
+                .replace(Regex("[）)]$"), "")
+                .replace(Regex("[。．.！!？\\?]+$"), "")
+
+            if (normalized.isEmpty()) return false
+            // Hallucinations are typically short boilerplate phrases
+            if (normalized.length > 60) return false
+
+            return HALLUCINATION_PHRASES.any { phrase ->
+                val normalizedPhrase = phrase.lowercase()
+                    .replace(Regex("[。．.！!？\\?]+$"), "")
+
+                // Check for exact match or if the output is just a slightly modified version of the boilerplate
+                if (normalized == normalizedPhrase) return@any true
+
+                // For English common hallucinations, they often appear at the start or end of the text
+                if (phrase.any { it in 'a'..'z' }) {
+                    normalized.contains(normalizedPhrase) && normalized.length < normalizedPhrase.length + 20
+                } else {
+                    // For Japanese, we are more careful with "contains"
+                    normalized.contains(normalizedPhrase) && normalized.length < normalizedPhrase.length + 10
+                }
             }
         }
     }
