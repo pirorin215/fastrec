@@ -67,6 +67,7 @@ fun MainScreen(
     var showAppLogPanel by remember { mutableStateOf(false) } // New state for AppLogCard visibility
     var showGoogleTasksSyncSettings by remember { mutableStateOf(false) } // New state for GoogleTasksSyncSettingsScreen
     var showDeviceHistoryScreen by remember { mutableStateOf(false) }
+    var showWavSaveFolderDialog by remember { mutableStateOf(false) } // New state for WAV save folder dialog
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -237,6 +238,14 @@ fun MainScreen(
                                 )
 
                                 DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.menu_wav_save_folder)) },
+                                    onClick = {
+                                        showWavSaveFolderDialog = true
+                                        expanded = false
+                                    }
+                                )
+
+                                DropdownMenuItem(
                                     text = { Text(stringResource(R.string.menu_app_log)) },
                                     onClick = {
                                         showAppLogPanel = !showAppLogPanel // Toggle visibility
@@ -293,6 +302,36 @@ fun MainScreen(
                                 onClearLogs = { viewModel.clearLogs() }
                             )
                         }
+                    }
+
+                    // WAV Save Folder Dialog
+                    if (showWavSaveFolderDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showWavSaveFolderDialog = false },
+                            title = {
+                                Text(stringResource(R.string.wav_save_folder_title))
+                            },
+                            text = {
+                                Column {
+                                    Text(
+                                        stringResource(R.string.wav_save_folder_path),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        "※ファイルマネージャーアプリなどで上記パスを開くとWAVファイルを確認できます。",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = { showWavSaveFolderDialog = false }
+                                ) {
+                                    Text(stringResource(R.string.close))
+                                }
+                            }
+                        )
                     }
                 }
             }

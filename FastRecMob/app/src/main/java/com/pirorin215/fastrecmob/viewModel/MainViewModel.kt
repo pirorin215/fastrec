@@ -127,10 +127,9 @@ class MainViewModel(
     fun resetTranscriptionState() = transcriptionManager.resetTranscriptionState()
     fun playAudioFile(transcriptionResult: TranscriptionResult) {
         viewModelScope.launch {
-            val audioDir = appSettingsRepository.getFlow(Settings.AUDIO_DIR_NAME).firstOrNull() ?: "FastRecRecordings"
-            val fileToPlay = com.pirorin215.fastrecmob.data.FileUtil.getAudioFile(application, audioDir, transcriptionResult.fileName)
-            if (fileToPlay.exists()) {
-                audioPlayerManager.play(fileToPlay.absolutePath) {
+            val filePath = com.pirorin215.fastrecmob.data.FileUtil.getAudioFilePath(application, transcriptionResult.fileName)
+            if (filePath != null) {
+                audioPlayerManager.play(filePath) {
                     // This callback is executed on completion.
                     // We need to switch to the viewModelScope to ensure state is updated on the main thread.
                     viewModelScope.launch {

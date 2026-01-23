@@ -29,7 +29,7 @@ class GroqLLMService(
 
     init {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = HttpLoggingInterceptor.Level.NONE
         }
 
         client = OkHttpClient.Builder()

@@ -1,7 +1,11 @@
 package com.pirorin215.fastrecmob.data
 
+import android.content.ContentUris
 import android.content.Context
+import android.net.Uri
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import java.io.File
 import java.text.ParseException
 import java.text.SimpleDateFormat
@@ -145,13 +149,12 @@ object FileUtil {
     }
 
     fun getAudioFileSizeString(context: Context, dirName: String, fileName: String): String {
-        val audioFile = getAudioFile(context, dirName, fileName)
-        if (!audioFile.exists()) {
+        // Use MediaStore API to get file size
+        val fileSizeInBytes = getAudioFileSizeFromMediaStore(context, fileName)
+        if (fileSizeInBytes <= 0) {
             return "File not found"
         }
-
-        val fileSizeInBytes = audioFile.length()
-        return "${formatFileSize(fileSizeInBytes)} (${fileSizeInBytes} bytes)"
+        return "${formatFileSize(fileSizeInBytes)} ($fileSizeInBytes bytes)"
     }
 
     private fun formatFileSize(size: Long): String {
@@ -159,5 +162,104 @@ object FileUtil {
         val units = arrayOf("B", "KB", "MB", "GB", "TB")
         val digitGroups = (Math.log10(size.toDouble()) / Math.log10(1024.0)).toInt()
         return String.format(Locale.getDefault(), "%.1f %s", size / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
+    }
+
+    // ========== MediaStore API for Documents/FastRecMob/ ==========
+
+    /**
+     * Get the URI of an audio file in Documents/FastRecMob/ using MediaStore
+     * @return Uri or null if not found
+     */
+    fun getAudioFileUri(context: Context, fileName: String): Uri? {
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Files.getContentUri("external")
+        } else {
+            MediaStore.Files.getContentUri("external")
+        }
+
+        val projection = arrayOf(
+            MediaStore.Files.FileColumns._ID,
+            MediaStore.Files.FileColumns.DISPLAY_NAME,
+            MediaStore.Files.FileColumns.RELATIVE_PATH
+        )
+
+        val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME} = ? AND " +
+                "${MediaStore.Files.FileColumns.RELATIVE_PATH} = ?"
+        val selectionArgs = arrayOf(fileName, "${Environment.DIRECTORY_DOCUMENTS}/FastRecMob/")
+
+        context.contentResolver.query(
+            collection,
+            projection,
+            selection,
+            selectionArgs,
+            null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
+                val id = cursor.getLong(idColumn)
+                return ContentUris.withAppendedId(collection, id)
+            }
+        }
+        return null
+    }
+
+    /**
+     * Delete an audio file from Documents/FastRecMob/ using MediaStore
+     * @return true if deleted, false otherwise
+     */
+    fun deleteAudioFile(context: Context, fileName: String): Boolean {
+        val uri = getAudioFileUri(context, fileName) ?: return false
+        return try {
+            context.contentResolver.delete(uri, null, null) > 0
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
+     * Get the size of an audio file in Documents/FastRecMob/ using MediaStore
+     * @return file size in bytes, or 0 if not found
+     */
+    fun getAudioFileSizeFromMediaStore(context: Context, fileName: String): Long {
+        val uri = getAudioFileUri(context, fileName) ?: return 0
+
+        val projection = arrayOf(MediaStore.Files.FileColumns.SIZE)
+        context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.SIZE)
+                return cursor.getLong(sizeColumn)
+            }
+        }
+        return 0
+    }
+
+    /**
+     * Check if an audio file exists in Documents/FastRecMob/
+     */
+    fun audioFileExists(context: Context, fileName: String): Boolean {
+        return getAudioFileUri(context, fileName) != null
+    }
+
+    /**
+     * Get the actual file path from MediaStore URI
+     * Note: This uses DATA column which is deprecated on Android 10+,
+     * but still works on most devices for compatibility with existing code.
+     * @return file path string or null if not found
+     */
+    fun getAudioFilePath(context: Context, fileName: String): String? {
+        val uri = getAudioFileUri(context, fileName) ?: return null
+
+        // Try to get the actual file path from DATA column (deprecated but works)
+        val projection = arrayOf(MediaStore.Files.FileColumns.DATA)
+        context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val dataIndex = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATA)
+                if (dataIndex >= 0 && !cursor.isNull(dataIndex)) {
+                    return cursor.getString(dataIndex)
+                }
+            }
+        }
+        return null
     }
 }

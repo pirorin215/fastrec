@@ -3,6 +3,7 @@ package com.pirorin215.fastrecmob.ui.screen
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -110,27 +111,74 @@ fun TranscriptionResultPanel(viewModel: MainViewModel, appSettingsViewModel: App
                     }
                 } else {
                     items(items = transcriptionResults, key = { it.fileName }) { result ->
-                        TranscriptionResultItem(
-                            result = result,
-                            fontSize = fontSize,
-                            isSelected = selectedFileNames.contains(result.fileName),
-                            onItemClick = { clickedItem -> selectedResultForDetail = clickedItem },
-                            onToggleSelection = { fileName -> viewModel.toggleSelection(fileName) }
-                        )
+                        val isSelected = selectedFileNames.contains(result.fileName)
+                        val isSelectionMode = selectedFileNames.isNotEmpty()
+
+                        val backgroundColor = when {
+                            isSelected -> MaterialTheme.colorScheme.primaryContainer
+                            result.transcriptionStatus == "PENDING" -> MaterialTheme.colorScheme.surfaceVariant
+                            result.transcriptionStatus == "FAILED" -> MaterialTheme.colorScheme.errorContainer
+                            result.googleTaskId != null -> MaterialTheme.colorScheme.surfaceVariant
+                            else -> MaterialTheme.colorScheme.surface
+                        }
+                        val contentColor = when {
+                            isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
+                            result.transcriptionStatus == "PENDING" -> MaterialTheme.colorScheme.onSurfaceVariant
+                            result.transcriptionStatus == "FAILED" -> MaterialTheme.colorScheme.onErrorContainer
+                            result.googleTaskId != null -> MaterialTheme.colorScheme.onSurfaceVariant
+                            else -> MaterialTheme.colorScheme.onSurface
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(backgroundColor)
+                                .combinedClickable(
+                                    onClick = {
+                                        if (isSelectionMode) {
+                                            viewModel.toggleSelection(result.fileName)
+                                        } else {
+                                            selectedResultForDetail = result
+                                        }
+                                    },
+                                    onLongClick = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        if (!isSelectionMode) {
+                                            viewModel.toggleSelection(result.fileName)
+                                        }
+                                    }
+                                )
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val dateTimeInfo = FileUtil.getRecordingDateTimeInfo(result.fileName)
+                            Column(modifier = Modifier.padding(horizontal = 8.dp).width(80.dp)) {
+                                Text(text = dateTimeInfo.date, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, color = contentColor)
+                                Text(text = dateTimeInfo.time, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, color = contentColor)
+                            }
+                            Text(
+                                text = result.transcription,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = fontSize.sp),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f).padding(end = 16.dp),
+                                color = contentColor
+                            )
+                        }
                         HorizontalDivider()
                     }
                 }
             }
     }
         selectedResultForDetail?.let { result ->
-            val audioFile = FileUtil.getAudioFile(context, audioDirName, result.fileName)
-            val isPlayingAudioFile = remember(currentlyPlayingFile, audioFile.absolutePath) {
-                derivedStateOf { currentlyPlayingFile == audioFile.absolutePath }
+            val audioFilePath = FileUtil.getAudioFilePath(context, result.fileName)
+            val isPlayingAudioFile = remember(currentlyPlayingFile, audioFilePath) {
+                derivedStateOf { currentlyPlayingFile == audioFilePath }
             }
             TranscriptionDetailBottomSheet(
                 result = result,
                 fontSize = fontSize,
-                audioFileExists = audioFile.exists(),
+                audioFileExists = FileUtil.audioFileExists(context, result.fileName),
                 audioDirName = audioDirName,
                 isPlaying = isPlayingAudioFile.value,
                 onPlay = { transcriptionResult ->
@@ -228,64 +276,6 @@ fun TranscriptionResultPanel(viewModel: MainViewModel, appSettingsViewModel: App
                         Text(stringResource(R.string.cancel_button))
                     }
                 }
-            )
-        }
-    }
-}
-
-@Composable
-fun TranscriptionResultItem(
-    result: TranscriptionResult,
-    fontSize: Int,
-    isSelected: Boolean,
-    onItemClick: (TranscriptionResult) -> Unit,
-    onToggleSelection: (String) -> Unit
-) {
-    val backgroundColor = when {
-        isSelected -> MaterialTheme.colorScheme.primaryContainer
-        result.transcriptionStatus == "PENDING" -> MaterialTheme.colorScheme.surfaceVariant
-        result.transcriptionStatus == "FAILED" -> MaterialTheme.colorScheme.errorContainer
-        result.googleTaskId != null -> MaterialTheme.colorScheme.surfaceVariant // Synced items
-        else -> MaterialTheme.colorScheme.surface
-    }
-    val contentColor = when {
-        isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
-        result.transcriptionStatus == "PENDING" -> MaterialTheme.colorScheme.onSurfaceVariant
-        result.transcriptionStatus == "FAILED" -> MaterialTheme.colorScheme.onErrorContainer
-        result.googleTaskId != null -> MaterialTheme.colorScheme.onSurfaceVariant // Synced items
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(backgroundColor)
-            .clickable { onItemClick(result) }
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Checkbox(
-            checked = isSelected,
-            onCheckedChange = { onToggleSelection(result.fileName) },
-            modifier = Modifier.padding(start = 8.dp)
-        )
-
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val dateTimeInfo = FileUtil.getRecordingDateTimeInfo(result.fileName)
-            Column(modifier = Modifier.padding(horizontal = 8.dp).width(80.dp)) {
-                Text(text = dateTimeInfo.date, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, color = contentColor)
-                Text(text = dateTimeInfo.time, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, color = contentColor)
-            }
-            Text(
-                text = result.transcription,
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = fontSize.sp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).padding(end = 16.dp),
-                color = contentColor
             )
         }
     }

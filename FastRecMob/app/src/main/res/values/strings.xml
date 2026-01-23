@@ -14,6 +14,10 @@
     <string name="menu_recorder_settings">レコーダ設定</string>
     <string name="menu_recorder_log">レコーダログ</string>
     <string name="menu_device_history">デバイス状態</string>
+    <string name="menu_wav_save_folder">WAV保存フォルダ</string>
+    <string name="wav_save_folder_title">WAVファイルの保存先</string>
+    <string name="wav_save_folder_path">/storage/emulated/0/Documents/FastRecMob/</string>
+    <string name="close">閉じる</string>
     <string name="menu_app_log">アプリログ</string>
     <string name="app_log_title">@string/menu_app_log</string>
     <string name="more_options_content_description">More options</string>

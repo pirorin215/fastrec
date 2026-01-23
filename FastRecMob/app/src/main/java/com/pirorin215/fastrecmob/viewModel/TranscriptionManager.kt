@@ -236,18 +236,34 @@ class TranscriptionManager(
 
     fun updateLocalAudioFileCount() {
         scope.launch {
-            val audioDirName = audioDirNameFlow.value
-            val audioDir = context.getExternalFilesDir(audioDirName)
-            if (audioDir != null && audioDir.exists()) {
-                val count = audioDir.listFiles { _, name ->
-                    name.matches(Regex("""R\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.wav"""))
-                }?.size ?: 0
-                _audioFileCount.value = count
-                logManager.addDebugLog("Audio file count: $count")
+            // Count files in Documents/FastRecMob/ using MediaStore API
+            val collection = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                android.provider.MediaStore.Files.getContentUri("external")
             } else {
-                _audioFileCount.value = 0
-                logManager.addDebugLog("Audio directory not found")
+                android.provider.MediaStore.Files.getContentUri("external")
             }
+
+            val projection = arrayOf(android.provider.MediaStore.Files.FileColumns._ID)
+            val selection = "${android.provider.MediaStore.Files.FileColumns.RELATIVE_PATH} = ? AND " +
+                    "${android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE ?"
+            val selectionArgs = arrayOf(
+                "${android.os.Environment.DIRECTORY_DOCUMENTS}/FastRecMob/",
+                "R%.wav"
+            )
+
+            var count = 0
+            context.contentResolver.query(
+                collection,
+                projection,
+                selection,
+                selectionArgs,
+                null
+            )?.use { cursor ->
+                count = cursor.count
+            }
+
+            _audioFileCount.value = count
+            logManager.addDebugLog("Audio file count in Documents/FastRecMob/: $count")
         }
     }
 
@@ -264,7 +280,16 @@ class TranscriptionManager(
 
     suspend fun doTranscription(resultToProcess: TranscriptionResult) {
         logManager.addDebugLog("Starting transcription: ${resultToProcess.fileName}")
-        val filePath = FileUtil.getAudioFile(context, audioDirNameFlow.value, resultToProcess.fileName).absolutePath
+        val filePath = FileUtil.getAudioFilePath(context, resultToProcess.fileName)
+        if (filePath == null) {
+            logManager.addLog("Transcription failed: file not found", LogLevel.ERROR)
+            val errorResult = resultToProcess.copy(
+                transcription = "文字起こしエラー: ファイルが見つかりません",
+                transcriptionStatus = "FAILED"
+            )
+            transcriptionResultRepository.addResult(errorResult)
+            return
+        }
         _transcriptionState.value = "Transcribing ${File(filePath).name}"
 
         // Detect recording type from filename (AI*.wav vs R*.wav)
@@ -484,15 +509,11 @@ class TranscriptionManager(
                     transcriptionResultRepository.removeResult(result)
                     logManager.addDebugLog("Deleted result: ${result.fileName}")
 
-                    // Delete associated audio file
-                    val audioDirName = audioDirNameFlow.value
-                    val audioFile = FileUtil.getAudioFile(context, audioDirName, result.fileName)
-                    if (audioFile.exists()) {
-                        if (audioFile.delete()) {
-                            logManager.addDebugLog("Deleted audio: ${result.fileName}")
-                        } else {
-                            logManager.addLog("Failed to delete audio: ${result.fileName}", LogLevel.ERROR)
-                        }
+                    // Delete associated audio file using MediaStore API
+                    if (FileUtil.deleteAudioFile(context, result.fileName)) {
+                        logManager.addDebugLog("Deleted audio: ${result.fileName}")
+                    } else {
+                        logManager.addLog("Failed to delete audio: ${result.fileName}", LogLevel.ERROR)
                     }
                 }
                 logManager.addDebugLog("Cleanup complete")
@@ -510,9 +531,8 @@ class TranscriptionManager(
         scope.launch {
             logManager.addLog("Retranscribing: ${result.fileName}")
 
-            val audioDirName = audioDirNameFlow.value
-            val audioFile = FileUtil.getAudioFile(context, audioDirName, result.fileName)
-            if (!audioFile.exists()) {
+            // Check if audio file exists using MediaStore API
+            if (!FileUtil.audioFileExists(context, result.fileName)) {
                 logManager.addLog("Retranscribe failed: file not found", LogLevel.ERROR)
                 // Optionally update status to FAILED here if desired
                 val updatedResult = result.copy(transcriptionStatus = "FAILED", transcription = "Audio file not found.")
@@ -616,15 +636,12 @@ class TranscriptionManager(
 
             val updatedListForRepo = mutableListOf<TranscriptionResult>()
 
-            // First, delete all associated WAV files
+            // First, delete all associated WAV files using MediaStore API
             currentTranscriptionResults.forEach { result ->
-                val audioFile = FileUtil.getAudioFile(context, audioDirNameFlow.value, result.fileName)
-                if (audioFile.exists()) {
-                    if (audioFile.delete()) {
-                        logManager.addDebugLog("Deleted: ${result.fileName}")
-                    } else {
-                        logManager.addLog("Failed to delete: ${result.fileName}", LogLevel.ERROR)
-                    }
+                if (FileUtil.deleteAudioFile(context, result.fileName)) {
+                    logManager.addDebugLog("Deleted: ${result.fileName}")
+                } else {
+                    logManager.addLog("Failed to delete: ${result.fileName}", LogLevel.ERROR)
                 }
 
                 if (result.googleTaskId == null) {
@@ -655,14 +672,12 @@ class TranscriptionManager(
                 logManager.addLog("Deleted: ${result.fileName}")
             }
 
-            val audioFile = FileUtil.getAudioFile(context, audioDirNameFlow.value, result.fileName)
-            if (audioFile.exists()) {
-                if (audioFile.delete()) {
-                    logManager.addDebugLog("Audio deleted: ${result.fileName}")
-                    updateLocalAudioFileCount()
-                } else {
-                    logManager.addLog("Failed to delete audio: ${result.fileName}", LogLevel.ERROR)
-                }
+            // Delete audio file using MediaStore API
+            if (FileUtil.deleteAudioFile(context, result.fileName)) {
+                logManager.addDebugLog("Audio deleted: ${result.fileName}")
+                updateLocalAudioFileCount()
+            } else {
+                logManager.addLog("Failed to delete audio: ${result.fileName}", LogLevel.ERROR)
             }
         }
     }

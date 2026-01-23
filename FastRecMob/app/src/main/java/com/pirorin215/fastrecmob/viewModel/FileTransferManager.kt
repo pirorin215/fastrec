@@ -145,14 +145,39 @@ class FileTransferManager(
                 return uri?.toString()
 
             } else {
-                val audioDir = context.getExternalFilesDir(audioDirNameFlow.value)
-                if (audioDir != null && !audioDir.exists()) {
-                    audioDir.mkdirs()
+                // Save to Documents/FastRecMob/ using MediaStore API
+                val outputStream: OutputStream?
+                val uri: Uri?
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                        put(MediaStore.MediaColumns.MIME_TYPE, "audio/wav")
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOCUMENTS}/FastRecMob")
+                    }
+
+                    val resolver = context.contentResolver
+                    uri = resolver.insert(MediaStore.Files.getContentUri("external"), contentValues)
+                    outputStream = uri?.let { resolver.openOutputStream(it) }
+                } else {
+                    @Suppress("DEPRECATION")
+                    val fastRecDir = File(
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+                        "FastRecMob"
+                    )
+                    if (!fastRecDir.exists()) {
+                        fastRecDir.mkdirs()
+                    }
+                    val file = File(fastRecDir, fileName)
+                    uri = Uri.fromFile(file)
+                    outputStream = FileOutputStream(file)
                 }
-                val file = File(audioDir, fileName)
-                FileOutputStream(file).use { it.write(data) }
-                logManager.addDebugLog("Audio saved: ${file.absolutePath}")
-                return file.absolutePath
+
+                outputStream?.use { stream ->
+                    stream.write(data)
+                } ?: throw Exception("Failed to get output stream for audio file.")
+
+                logManager.addDebugLog("Audio saved to Documents/FastRecMob/: $fileName")
+                return uri?.toString()
             }
         } catch (e: Exception) {
             logManager.addLog("File save error: ${e.message}", LogLevel.ERROR)
@@ -325,23 +350,18 @@ class FileTransferManager(
                 if (fileName.startsWith("log.", ignoreCase = true)) {
                     logManager.addLog("Log downloaded: $fileName")
                 } else if (fileName.endsWith(".wav", ignoreCase = true)) {
-                    val file = File(savedFilePath)
-                    if (file.exists()) {
-                        // Wait for pending transcription record to be fully created
-                        transcriptionManager.addPendingTranscription(file.name)
-                        logManager.addDebugLog("Queued for transcription: ${file.name}")
+                    // File is saved to Documents/FastRecMob/, use fileName directly
+                    // For MediaStore URIs, we use fileName instead of File object
+                    transcriptionManager.addPendingTranscription(fileName)
+                    logManager.addDebugLog("Queued for transcription: $fileName")
 
-                        // Now trigger transcription processing (record is guaranteed to exist)
-                        transcriptionManager.processPendingTranscriptions()
+                    // Now trigger transcription processing (record is guaranteed to exist)
+                    transcriptionManager.processPendingTranscriptions()
 
-                        scope.launch { transcriptionManager.cleanupTranscriptionResultsAndAudioFiles() }
-                        transcriptionManager.updateLocalAudioFileCount()
+                    scope.launch { transcriptionManager.cleanupTranscriptionResultsAndAudioFiles() }
+                    transcriptionManager.updateLocalAudioFileCount()
 
-                        // Deletion is now handled by the orchestrator after transcription.
-                    } else {
-                        logManager.addLog("WAV file not found: ${file.absolutePath}", LogLevel.ERROR)
-                        downloadSuccess = false
-                    }
+                    // Deletion is now handled by the orchestrator after transcription.
                 }
             } else {
                 logManager.addLog("Download failed: $fileName", LogLevel.ERROR)
