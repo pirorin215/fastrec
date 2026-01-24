@@ -29,6 +29,14 @@ enum class ApiKeyStatus {
     UNKNOWN_ERROR
 }
 
+enum class ModelValidationStatus {
+    VALID,
+    INVALID,
+    CHECKING,
+    NOT_CHECKED,
+    ERROR
+}
+
 class AppSettingsViewModel(
     private val appSettingsRepository: AppSettingsRepository,
     private val transcriptionManager: TranscriptionManager, // Added
@@ -37,6 +45,12 @@ class AppSettingsViewModel(
 
     private val _apiKeyStatus = MutableStateFlow(ApiKeyStatus.CHECKING)
     val apiKeyStatus: StateFlow<ApiKeyStatus> = _apiKeyStatus.asStateFlow()
+
+    private val _modelValidationStatus = MutableStateFlow<ModelValidationStatus>(ModelValidationStatus.NOT_CHECKED)
+    val modelValidationStatus: StateFlow<ModelValidationStatus> = _modelValidationStatus.asStateFlow()
+
+    private val _modelValidationError = MutableStateFlow<String?>(null)
+    val modelValidationError: StateFlow<String?> = _modelValidationError.asStateFlow()
 
     val apiKey: StateFlow<String> = appSettingsRepository.getFlow(Settings.API_KEY)
         .stateIn(
@@ -415,6 +429,65 @@ class AppSettingsViewModel(
                 ApiKeyStatus.INVALID
             }
         }
+    }
+
+    /**
+     * Verify if the specified Gemini model is valid
+     * @param modelName The model name to verify (e.g., "gemini-2.0-flash")
+     */
+    suspend fun verifyGeminiModel(modelName: String): Result<Unit> {
+        _modelValidationStatus.value = ModelValidationStatus.CHECKING
+        _modelValidationError.value = null
+
+        val apiKey = appSettingsRepository.getFlow(Settings.GEMINI_API_KEY).first()
+
+        if (apiKey.isEmpty()) {
+            _modelValidationStatus.value = ModelValidationStatus.ERROR
+            _modelValidationError.value = "Gemini APIキーが設定されていません"
+            return Result.failure(IllegalStateException("API key is empty"))
+        }
+
+        if (modelName.isEmpty()) {
+            _modelValidationStatus.value = ModelValidationStatus.ERROR
+            _modelValidationError.value = "モデル名が空です"
+            return Result.failure(IllegalArgumentException("Model name is empty"))
+        }
+
+        return try {
+            val geminiService = com.pirorin215.fastrecmob.service.GeminiService(
+                context = application.applicationContext,
+                apiKey = apiKey,
+                modelName = modelName
+            )
+            val result = geminiService.verifyModel(modelName)
+
+            if (result.isSuccess) {
+                _modelValidationStatus.value = ModelValidationStatus.VALID
+                _modelValidationError.value = null
+                Result.success(Unit)
+            } else {
+                val error = result.exceptionOrNull()
+                val errorMessage = when {
+                    error?.message?.contains("NOT_FOUND") == true ||
+                    error?.message?.contains("not found") == true -> "モデル '${modelName}' は存在しません。\n別のモデルを選択してください。"
+                    error?.message?.contains("API key") == true -> "APIキーに問題があります。\nモデル: ${modelName}"
+                    else -> "モデル '${modelName}' の検証に失敗しました。\n${error?.message}"
+                }
+                _modelValidationStatus.value = ModelValidationStatus.INVALID
+                _modelValidationError.value = errorMessage
+                Result.failure(error ?: Exception("Unknown error"))
+            }
+        } catch (e: Exception) {
+            val errorMessage = "モデル '${modelName}' の検証中にエラーが発生しました。\n${e.message}"
+            _modelValidationStatus.value = ModelValidationStatus.ERROR
+            _modelValidationError.value = errorMessage
+            Result.failure(e)
+        }
+    }
+
+    fun resetModelValidationStatus() {
+        _modelValidationStatus.value = ModelValidationStatus.NOT_CHECKED
+        _modelValidationError.value = null
     }
 }
 

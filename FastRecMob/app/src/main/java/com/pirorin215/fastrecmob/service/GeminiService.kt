@@ -74,4 +74,39 @@ class GeminiService(
             }
         }
     }
+
+    /**
+     * Verify that a specific model name is valid
+     * Creates a temporary GenerativeModel with the specified name and tests it
+     */
+    suspend fun verifyModel(modelName: String): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            if (apiKey.isBlank()) {
+                return@withContext Result.failure(IllegalArgumentException("API key is empty"))
+            }
+            if (modelName.isBlank()) {
+                return@withContext Result.failure(IllegalArgumentException("Model name is empty"))
+            }
+            try {
+                val testModel = GenerativeModel(
+                    modelName = modelName,
+                    apiKey = apiKey
+                )
+                // Try to generate a simple test response
+                testModel.generateContent("test")
+                Result.success(Unit)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Result.failure(e)
+            }
+        }
+    }
+
+    companion object {
+        /**
+         * List of known valid Gemini model versions
+         * Users can select versions in 0.5 increments, but not all may be valid
+         */
+        val KNOWN_VERSIONS = listOf(1.0f, 1.5f, 2.0f, 2.5f)
+    }
 }

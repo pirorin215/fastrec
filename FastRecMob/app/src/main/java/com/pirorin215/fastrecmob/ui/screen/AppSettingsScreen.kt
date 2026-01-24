@@ -8,46 +8,55 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.pirorin215.fastrecmob.R
-import androidx.compose.ui.unit.sp
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
-import androidx.compose.material3.Switch // Import Switch
-import androidx.compose.material3.SwitchDefaults // Import SwitchDefaults
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import android.net.Uri
 import com.pirorin215.fastrecmob.data.ThemeMode
 import com.pirorin215.fastrecmob.data.TranscriptionProvider
 import com.pirorin215.fastrecmob.data.AIProvider
 import com.pirorin215.fastrecmob.data.ProviderMode
 import com.pirorin215.fastrecmob.data.GeminiModel
 import com.pirorin215.fastrecmob.viewModel.AppSettingsViewModel
+import com.pirorin215.fastrecmob.viewModel.ModelValidationStatus
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import kotlin.math.roundToInt
 
 import androidx.activity.compose.BackHandler
@@ -56,6 +65,11 @@ import androidx.activity.compose.BackHandler
 @Composable
 fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
+    val coroutineScope = rememberCoroutineScope()
+
+    // stringResourceを事前に取得
+    val saveButtonText = stringResource(R.string.save_button)
+    val appSettingsTitle = stringResource(R.string.app_settings_title)
 
     // DataStoreから現在の設定値を取得
     val currentApiKey by appSettingsViewModel.apiKey.collectAsState()
@@ -65,17 +79,19 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
     val currentAIProvider by appSettingsViewModel.aiProvider.collectAsState()
     val currentProviderMode by appSettingsViewModel.providerMode.collectAsState()
     val currentGeminiModel by appSettingsViewModel.geminiModel.collectAsState()
-    val currentTranscriptionCacheLimit by appSettingsViewModel.transcriptionCacheLimit.collectAsState() // Renamed
+    val currentTranscriptionCacheLimit by appSettingsViewModel.transcriptionCacheLimit.collectAsState()
     val currentFontSize by appSettingsViewModel.transcriptionFontSize.collectAsState()
     val currentThemeMode by appSettingsViewModel.themeMode.collectAsState()
     val currentGoogleTaskTitleLength by appSettingsViewModel.googleTaskTitleLength.collectAsState()
-    val currentAutoStartOnBoot by appSettingsViewModel.autoStartOnBoot.collectAsState() // New: Auto-start setting
+    val currentAutoStartOnBoot by appSettingsViewModel.autoStartOnBoot.collectAsState()
     val currentChunkBurstSize by appSettingsViewModel.chunkBurstSize.collectAsState()
     val currentVoltageRetryCount by appSettingsViewModel.voltageRetryCount.collectAsState()
     val currentVoltageAcquisitionInterval by appSettingsViewModel.voltageAcquisitionInterval.collectAsState()
     val currentLowVoltageThreshold by appSettingsViewModel.lowVoltageThreshold.collectAsState()
     val currentLowVoltageNotifyEveryTime by appSettingsViewModel.lowVoltageNotifyEveryTime.collectAsState()
     val currentTranscriptionNotificationEnabled by appSettingsViewModel.transcriptionNotificationEnabled.collectAsState()
+    val modelValidationStatus by appSettingsViewModel.modelValidationStatus.collectAsState()
+    val modelValidationError by appSettingsViewModel.modelValidationError.collectAsState()
 
     // TextFieldの状態を管理
     var apiKeyText by remember(currentApiKey) { mutableStateOf(currentApiKey) }
@@ -85,11 +101,11 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
     var selectedAIProvider by remember(currentAIProvider) { mutableStateOf(currentAIProvider) }
     var selectedProviderMode by remember(currentProviderMode) { mutableStateOf(currentProviderMode) }
     var selectedGeminiModel by remember(currentGeminiModel) { mutableStateOf(currentGeminiModel) }
-    var transcriptionCacheLimitText by remember(currentTranscriptionCacheLimit) { mutableStateOf(currentTranscriptionCacheLimit.toString()) } // Renamed
+    var transcriptionCacheLimitText by remember(currentTranscriptionCacheLimit) { mutableStateOf(currentTranscriptionCacheLimit.toString()) }
     var fontSizeSliderValue by remember(currentFontSize) { mutableStateOf(currentFontSize.toFloat()) }
     var selectedThemeMode by remember(currentThemeMode) { mutableStateOf(currentThemeMode) }
     var googleTaskTitleLengthText by remember(currentGoogleTaskTitleLength) { mutableStateOf(currentGoogleTaskTitleLength.toString()) }
-    var autoStartOnBootChecked by remember(currentAutoStartOnBoot) { mutableStateOf(currentAutoStartOnBoot) } // New: Auto-start checked state
+    var autoStartOnBootChecked by remember(currentAutoStartOnBoot) { mutableStateOf(currentAutoStartOnBoot) }
     var chunkBurstSizeText by remember(currentChunkBurstSize) { mutableStateOf(currentChunkBurstSize.toString()) }
     var voltageRetryCountText by remember(currentVoltageRetryCount) { mutableStateOf(currentVoltageRetryCount.toString()) }
     var voltageAcquisitionIntervalText by remember(currentVoltageAcquisitionInterval) { mutableStateOf(currentVoltageAcquisitionInterval.toString()) }
@@ -97,7 +113,13 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
     var lowVoltageNotifyEveryTimeChecked by remember(currentLowVoltageNotifyEveryTime) { mutableStateOf(currentLowVoltageNotifyEveryTime) }
     var transcriptionNotificationEnabledChecked by remember(currentTranscriptionNotificationEnabled) { mutableStateOf(currentTranscriptionNotificationEnabled) }
 
-    val saveSettings = {
+    // ダイアログ用state
+    var showErrorDialog by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
+    var showSavingDialog by remember { mutableStateOf(false) }
+
+    // saveAllSettingsを先に定義
+    val saveAllSettings = {
         appSettingsViewModel.saveApiKey(apiKeyText)
         appSettingsViewModel.saveGeminiApiKey(geminiApiKeyText)
         appSettingsViewModel.saveGroqApiKey(groqApiKeyText)
@@ -123,10 +145,43 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
         onBack()
     }
 
+    val saveSettings: () -> Unit = {
+        // GCPモードでGemini APIキーがある場合のみモデル検証
+        if (selectedProviderMode == ProviderMode.GCP && geminiApiKeyText.isNotBlank()) {
+            showSavingDialog = true
+            coroutineScope.launch {
+                val result = appSettingsViewModel.verifyGeminiModel(selectedGeminiModel.modelName)
+                showSavingDialog = false
+
+                if (result.isSuccess) {
+                    // モデルが有効な場合は保存
+                    saveAllSettings()
+                } else {
+                    // モデルが無効な場合はエラーダイアログを表示
+                    // Resultからエラーメッセージを生成
+                    val error = result.exceptionOrNull()
+                    val modelName = selectedGeminiModel.modelName
+                    errorMessage = when {
+                        error?.message?.contains("NOT_FOUND") == true ||
+                        error?.message?.contains("not found") == true ->
+                            "${modelName} は存在しません。\n別のモデルを選択してください。"
+                        error?.message?.contains("API key") == true ->
+                            "APIキーに問題があります。\nモデル: ${modelName}"
+                        else -> "モデル '${modelName}' の検証に失敗しました。\n${error?.message ?: "不明なエラー"}"
+                    }
+                    showErrorDialog = true
+                }
+            }
+        } else {
+            // GCPモードでない、またはAPIキーがない場合はそのまま保存
+            saveAllSettings()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.app_settings_title)) },
+                title = { Text(appSettingsTitle) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -134,7 +189,7 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
                 },
                 actions = {
                     IconButton(onClick = saveSettings) {
-                        Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.save_button))
+                        Icon(Icons.Filled.Check, contentDescription = saveButtonText)
                     }
                 }
             )
@@ -230,28 +285,49 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
                 }
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Version input and checkboxes in a single row
-                var geminiVersionText by remember(selectedGeminiModel.version) {
-                    mutableStateOf(selectedGeminiModel.version.toString())
-                }
+                // Version stepper and checkboxes
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedTextField(
-                        value = geminiVersionText,
-                        onValueChange = { newText ->
-                            geminiVersionText = newText
-                            val version = newText.toFloatOrNull()
-                            if (version != null && version > 0) {
-                                selectedGeminiModel = selectedGeminiModel.copy(version = version)
-                            }
-                        },
-                        label = { Text("バージョン") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.width(100.dp),
-                        singleLine = true
-                    )
+                    // Version stepper ([-] [value] [+])
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                val newVersion = ((selectedGeminiModel.version - 0.5f) * 2).toInt() / 2f
+                                if (newVersion >= 0.5f) {
+                                    selectedGeminiModel = selectedGeminiModel.copy(version = newVersion)
+                                }
+                            },
+                            modifier = Modifier.size(40.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "減らす", modifier = Modifier.size(20.dp))
+                        }
+
+                        Text(
+                            text = String.format("%.1f", selectedGeminiModel.version),
+                            fontSize = 16.sp,
+                            modifier = Modifier.width(50.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+
+                        OutlinedButton(
+                            onClick = {
+                                val newVersion = ((selectedGeminiModel.version + 0.5f) * 2).toInt() / 2f
+                                if (newVersion <= 10f) {
+                                    selectedGeminiModel = selectedGeminiModel.copy(version = newVersion)
+                                }
+                            },
+                            modifier = Modifier.size(40.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "増やす", modifier = Modifier.size(20.dp))
+                        }
+                    }
 
                     // Flash checkbox
                     Row(
@@ -426,6 +502,34 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
                 }
             }
         }
+    }
+
+    // Model validation error dialog
+    if (showErrorDialog) {
+        AlertDialog(
+            onDismissRequest = { showErrorDialog = false },
+            title = { Text("モデルの検証エラー") },
+            text = { Text(errorMessage) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showErrorDialog = false
+                    }
+                ) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    // Saving progress dialog
+    if (showSavingDialog) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("モデルを検証中") },
+            text = { Text("選択されたモデルが存在するか確認しています...") },
+            confirmButton = { }
+        )
     }
 }
 
