@@ -28,6 +28,7 @@ import com.pirorin215.fastrecmob.data.FileUtil
 import com.pirorin215.fastrecmob.data.TranscriptionResult
 import com.pirorin215.fastrecmob.viewModel.MainViewModel
 import com.pirorin215.fastrecmob.viewModel.AppSettingsViewModel
+import com.pirorin215.fastrecmob.ui.theme.PendingBackgroundColor
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -116,7 +117,7 @@ fun TranscriptionResultPanel(viewModel: MainViewModel, appSettingsViewModel: App
 
                         val backgroundColor = when {
                             isSelected -> MaterialTheme.colorScheme.primaryContainer
-                            result.transcriptionStatus == "PENDING" -> MaterialTheme.colorScheme.surfaceVariant
+                            result.transcriptionStatus == "PENDING" -> PendingBackgroundColor
                             result.transcriptionStatus == "FAILED" -> MaterialTheme.colorScheme.errorContainer
                             result.googleTaskId != null -> MaterialTheme.colorScheme.surfaceVariant
                             else -> MaterialTheme.colorScheme.surface

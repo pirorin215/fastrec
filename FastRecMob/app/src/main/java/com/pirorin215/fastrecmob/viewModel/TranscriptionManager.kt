@@ -417,25 +417,41 @@ class TranscriptionManager(
             scope.launch { _transcriptionCompletedFlow.emit(resultToProcess.fileName) }
         }.onFailure { error ->
             val errorMessage = error.message ?: "不明なエラー"
-            val displayMessage = if (errorMessage.contains("API key authentication failed") || errorMessage.contains("API key is not set")) {
+            val isNetworkError = isTransientNetworkError(error)
+            val isApiKeyError = errorMessage.contains("API key authentication failed") || errorMessage.contains("API key is not set")
+
+            val status = if (isNetworkError && !isApiKeyError) {
+                "PENDING" // Keep PENDING for transient network errors to enable retry
+            } else {
+                "FAILED" // Mark as FAILED for permanent errors
+            }
+
+            val displayMessage = if (isApiKeyError) {
                 "文字起こしエラー: APIキーに問題がある可能性があります。設定画面をご確認ください。詳細: $errorMessage"
+            } else if (isNetworkError) {
+                "文字起こし中... (通信エラーにより再試行します)"
             } else {
                 "文字起こしエラー: $errorMessage"
             }
-            _transcriptionState.value = "Error: $displayMessage"
+
+            _transcriptionState.value = if (isNetworkError) "Waiting to retry: ${resultToProcess.fileName}" else "Error: $displayMessage"
             _transcriptionResult.value = null
-            logManager.addLog("Transcription failed: $errorMessage", LogLevel.ERROR)
+            logManager.addLog("Transcription failed: $errorMessage (status: $status)", LogLevel.ERROR)
             val errorResult = resultToProcess.copy(
                 transcription = displayMessage,
                 locationData = locationData ?: resultToProcess.locationData,
-                transcriptionStatus = "FAILED",
+                transcriptionStatus = status,
                 recordingType = recordingType
             )
             transcriptionResultRepository.addResult(errorResult)
-            // Immediately sync with Google Tasks after failure to create a task indicating the error
-            googleTasksIntegration.syncTranscriptionResultsWithGoogleTasks(audioDirNameFlow.value)
-            // Notify that processing for this file is complete (even on failure)
-            scope.launch { _transcriptionCompletedFlow.emit(resultToProcess.fileName) }
+
+            // Only sync and emit completion for non-retryable errors
+            if (status == "FAILED") {
+                // Immediately sync with Google Tasks after failure to create a task indicating the error
+                googleTasksIntegration.syncTranscriptionResultsWithGoogleTasks(audioDirNameFlow.value)
+                // Notify that processing for this file is complete (even on failure)
+                scope.launch { _transcriptionCompletedFlow.emit(resultToProcess.fileName) }
+            }
         }
     }
 
@@ -709,7 +725,35 @@ class TranscriptionManager(
         }
     }
 
+    /**
+     * Determines if an error is a transient network error that should be retried.
+     *
+     * Transient errors (return true): network connectivity issues, timeouts, DNS resolution failures
+     * Permanent errors (return false): API key errors, file not found, authentication failures
+     */
+    private fun isTransientNetworkError(error: Throwable): Boolean {
+        val errorMessage = error.message?.lowercase() ?: ""
 
+        // Check exception type for known transient network errors
+        when (error) {
+            is java.net.UnknownHostException -> return true
+            is java.net.ConnectException -> return true
+            is java.net.SocketTimeoutException -> return true
+            is java.io.IOException -> {
+                // Only treat IOException as transient if it's network-related
+                return errorMessage.contains("connection") ||
+                       errorMessage.contains("network") ||
+                       errorMessage.contains("resolve host") ||
+                       errorMessage.contains("timeout")
+            }
+        }
+
+        // Check error message for network-related keywords
+        return errorMessage.contains("unable to resolve host") ||
+               errorMessage.contains("connection refused") ||
+               errorMessage.contains("failed to connect") ||
+               errorMessage.contains("network") && errorMessage.contains("unreachable")
+    }
 
 
     fun resetTranscriptionState() {
