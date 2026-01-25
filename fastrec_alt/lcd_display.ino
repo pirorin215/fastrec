@@ -40,6 +40,35 @@ void drawCustomChar(uint8_t x, uint8_t y, uint8_t charIndex) {
   }
 }
 
+// Draw battery level bar at top-right (20x10 pixels)
+// Divided into 5 segments with 1px gaps between
+void drawBatteryBar(int batteryLevel) {
+  const uint8_t barWidth = 20;
+  const uint8_t barHeight = 8;
+  const uint8_t barX = SSD1315_WIDTH - barWidth;  // Right side of display
+  const uint8_t barY = 0;
+
+  // Each segment is 3px wide with 1px gap between (total: 3*5 + 1*4 = 19px, aligned to right)
+  const uint8_t segmentWidth = 3;
+  const uint8_t gapWidth = 1;
+  const uint8_t numSegments = 5;
+
+  // Calculate how many segments to fill (20% per segment)
+  uint8_t segmentsToFill = (batteryLevel / 20);
+  if (segmentsToFill > numSegments) segmentsToFill = numSegments;
+
+  // Draw segments from right to left
+  for (uint8_t i = 0; i < numSegments; i++) {
+    if (i < segmentsToFill) {
+      // Calculate segment position (right to left)
+      uint8_t segX = barX + barWidth - 1 - (i * (segmentWidth + gapWidth)) - segmentWidth + 1;
+
+      // Draw filled segment
+      display.drawRect(segX, barY, segX + segmentWidth - 1, barY + barHeight - 1, true);
+    }
+  }
+}
+
 void setLcdBrightness(uint8_t brightness) {
   display.setBrightness(brightness);
 }
@@ -74,39 +103,47 @@ void displayLine(uint8_t lineNumber, const char* text) {
   display.drawString(0, lineNumber * LINE_HEIGHT, display_buffer, FONT_SIZE);
 }
 
-void displayStatus(const char* msg) {
+// Display top row: command/status, music icon, battery bar (shared by DEV and NORMAL modes)
+void displayTopRow() {
+  // Calculate Battery Level
+  int batteryLevel = (int)(((g_currentBatteryVoltage - BAT_VOL_MIN) / 1.0) * 100);
+  if (batteryLevel < 0) batteryLevel = 0;
+  if (batteryLevel > 100) batteryLevel = 100;
 
   char line1[MAX_CHARS_PER_LINE+1];
 
   if (isBLEConnected()) {
-    std::string displayBleCommand = "BLE ";
+    std::string displayBleCommand = "";
     if (!g_lastBleCommand.empty()) {
-      // Ensure the command fits, leaving space for "BLE "
-      int remainingChars = MAX_CHARS_PER_LINE - displayBleCommand.length();
-      if (g_lastBleCommand.length() > remainingChars) {
-        displayBleCommand += g_lastBleCommand.substr(0, remainingChars);
-      } else {
-        displayBleCommand += g_lastBleCommand;
-      }
+      displayBleCommand = g_lastBleCommand.substr(0, 7);
     }
-    strncpy(line1, displayBleCommand.c_str(), MAX_CHARS_PER_LINE);
-    line1[MAX_CHARS_PER_LINE] = '\0';
+    strncpy(line1, displayBleCommand.c_str(), 7);
+    line1[7] = '\0';
   } else {
     const char* appStateToDisplay = appStateStrings[g_currentAppState];
     snprintf(line1, sizeof(line1), "% -*s", MAX_CHARS_PER_LINE, appStateToDisplay);
   }
-  displayLine(0, line1); 
- 
-  // 2行目: フラッシュメモリ空き容量と電池残量
+  displayLine(0, line1);
+
+  // Draw '*' icon if audio files exist (x=43, before battery bar)
+  if (countAudioFiles() > 0) {
+    display.drawChar(43, 0, '*', FONT_SIZE);
+  }
+
+  // Draw battery bar at top-right (draw last to be on top)
+  drawBatteryBar(batteryLevel);
+}
+
+void displayStatus(const char* msg) {
+
+  // Display top row (shared with normal mode)
+  displayTopRow();
+
+  // 2行目: フラッシュメモリ空き容量
   char line2[MAX_CHARS_PER_LINE+1];
 
-  // Calculate Battery Level (BL)
-  int batteryLevel = (int)(((g_currentBatteryVoltage - BAT_VOL_MIN) / 1.0) * 100);
-  if (batteryLevel < 0) batteryLevel = 0;
-  if (batteryLevel > 100) batteryLevel = 100;
- 
   // FS display (no decimal)
-  int fsUsage = (int)ceil(getLittleFSUsagePercentage()); 
+  int fsUsage = (int)ceil(getLittleFSUsagePercentage());
 
   char fsUsageStr[7];
   if (countAudioFiles() == 0) {
@@ -114,9 +151,9 @@ void displayStatus(const char* msg) {
   } else {
     snprintf(fsUsageStr, sizeof(fsUsageStr), "FS:%3d", fsUsage);
   }
-  snprintf(line2, sizeof(line2), "%6s BL:%3d", fsUsageStr, batteryLevel);
-  displayLine(1, line2); 
- 
+  snprintf(line2, sizeof(line2), "%s", fsUsageStr);
+  displayLine(1, line2);
+
   // 3行目:時刻
   char line3[MAX_CHARS_PER_LINE+1];
   getFormattedRtcTime(line3, sizeof(line3));
@@ -134,6 +171,9 @@ void displayStatus(const char* msg) {
 }
 
 void displayNormalMode() {
+  // Display top row (shared with dev mode)
+  displayTopRow();
+
   struct tm timeinfo;
   if (!getValidRtcTime(&timeinfo)) {
     // RTC not set - display dashes
@@ -153,7 +193,7 @@ void displayNormalMode() {
   // Calculate position (centered in 72x40 display)
   // 5 chars * (13 + 2) pixels = 75 pixels total width
   uint8_t startX = 0;  // Slight offset from left edge
-  uint8_t startY = 2;  // Slight offset from top to avoid clipping
+  uint8_t startY = 12;  // Slight offset from top to avoid clipping
 
   // Draw each character with automatic spacing calculation
   uint8_t charIndex = 0;
