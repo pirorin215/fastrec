@@ -62,6 +62,7 @@ unsigned long VIBRA_STARTUP_MS = 500;
 unsigned long VIBRA_REC_START_MS = 300;
 unsigned long VIBRA_REC_STOP_MS = 300;
 bool VIBRA = true;
+bool DEV_MODE = false;
 
 // Other Timings/Debounce
 const unsigned long STATE_CHANGE_DEBOUNCE_MS = 200; // Debounce time for state changes

@@ -173,6 +173,22 @@ bool getFormattedRtcTime(char* buffer, size_t bufferSize) {
   }
 }
 
+// Helper function to get formatted RTC time string with day of week (for normal display mode).
+bool getFormattedRtcTimeWithDay(char* buffer, size_t bufferSize) {
+  struct tm timeinfo;
+  if (getValidRtcTime(&timeinfo)) {
+    // Format as "01:33"
+    snprintf(buffer, bufferSize, "%02d:%02d",
+             timeinfo.tm_hour,
+             timeinfo.tm_min);
+    return true;
+  } else {
+    strncpy(buffer, "No RTC", bufferSize);
+    buffer[bufferSize - 1] = '\0';
+    return false;
+  }
+}
+
 float getLittleFSUsagePercentage() {
   unsigned long totalBytes = LittleFS.totalBytes();
   unsigned long usedBytes = LittleFS.usedBytes();

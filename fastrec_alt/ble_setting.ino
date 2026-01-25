@@ -771,6 +771,9 @@ bool loadSettingsFromLittleFS() {
     } else if (strcmp(key, "USE_ADPCM") == 0) {
       USE_ADPCM = (strcmp(value, "true") == 0);
       applog("Setting USE_ADPCM to %s", USE_ADPCM ? "true" : "false");
+    } else if (strcmp(key, "DEV_MODE") == 0) {
+      DEV_MODE = (strcmp(value, "true") == 0);
+      applog("Setting DEV_MODE to %s", DEV_MODE ? "true" : "false");
 
     } else {
       applog("Unknown setting in setting.ini: %s", key);

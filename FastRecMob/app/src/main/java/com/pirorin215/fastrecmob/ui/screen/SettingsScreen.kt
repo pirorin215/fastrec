@@ -127,6 +127,7 @@ fun SettingsList(
         item { SettingSwitch("Log at Boot", settings.logAtBoot) { onSettingChange(settings.copy(logAtBoot = it)) } }
         item { SettingTextField("Deep Sleep Cycle (minutes)", settings.deepSleepCycleMinutes, KeyboardType.Number) { onSettingChange(settings.copy(deepSleepCycleMinutes = it)) } }
         item { SettingSwitch("Use ADPCM", settings.useAdpcm) { onSettingChange(settings.copy(useAdpcm = it)) } }
+        item { SettingSwitch("Dev Mode", settings.devMode) { onSettingChange(settings.copy(devMode = it)) } }
 
     }
 }

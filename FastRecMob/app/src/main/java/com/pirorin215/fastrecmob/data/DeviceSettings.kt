@@ -16,6 +16,7 @@ data class DeviceSettings(
     val chunkBurstSize: String = "",
     val deepSleepCycleMinutes: String = "",
     val useAdpcm: Boolean = false,
+    val devMode: Boolean = false,
 ) {
     fun toIniString(): String {
         return """
@@ -34,6 +35,7 @@ data class DeviceSettings(
             CHUNK_BURST_SIZE=$chunkBurstSize
             DEEP_SLEEP_CYCLE_MINUTES=$deepSleepCycleMinutes
             USE_ADPCM=$useAdpcm
+            DEV_MODE=$devMode
         """.trimIndent().lines().filter { it.contains("=") && it.split("=")[1].isNotEmpty() }.joinToString("\n")
     }
 
@@ -51,6 +53,7 @@ data class DeviceSettings(
         if (chunkBurstSize != other.chunkBurstSize) differences.add("CHUNK_BURST_SIZE: '${other.chunkBurstSize}' -> '$chunkBurstSize'")
         if (deepSleepCycleMinutes != other.deepSleepCycleMinutes) differences.add("DEEP_SLEEP_CYCLE_MINUTES: '${other.deepSleepCycleMinutes}' -> '$deepSleepCycleMinutes'")
         if (useAdpcm != other.useAdpcm) differences.add("USE_ADPCM: '${other.useAdpcm}' -> '$useAdpcm'")
+        if (devMode != other.devMode) differences.add("DEV_MODE: '${other.devMode}' -> '$devMode'")
         return differences.joinToString("\n")
     }
 
@@ -77,6 +80,7 @@ data class DeviceSettings(
                 chunkBurstSize = properties["CHUNK_BURST_SIZE"] ?: "",
                 deepSleepCycleMinutes = properties["DEEP_SLEEP_CYCLE_MINUTES"] ?: "",
                 useAdpcm = properties["USE_ADPCM"]?.toBoolean() ?: false,
+                devMode = properties["DEV_MODE"]?.toBoolean() ?: false,
             )
         }
     }
