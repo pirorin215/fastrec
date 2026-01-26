@@ -75,7 +75,7 @@ class GroqSpeechService(private val context: Context, private val apiKey: String
                     )
                     .addFormDataPart("model", "whisper-large-v3-turbo")
                     .addFormDataPart("language", "ja")
-                    .addFormDataPart("prompt", "これは短い音声メモです。聞き取れない場合は何も出力しないでください。")
+                    .addFormDataPart("prompt", "これは短い音声メモです。")
                     .addFormDataPart("response_format", "text")
                     .build()
 
