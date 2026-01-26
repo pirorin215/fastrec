@@ -187,7 +187,7 @@ void displayNormalMode() {
   uint8_t minutes = timeinfo.tm_min;
 
   // Font configuration
-  const uint8_t CHAR_SPACING = 1;   // Spacing between characters in pixels
+  const uint8_t CHAR_SPACING = 2;   // Spacing between characters in pixels
   const uint8_t STEP = FONT_WIDTH + CHAR_SPACING;  // Total step per character
 
   // Calculate position (centered in 72x40 display)
@@ -215,12 +215,52 @@ void displaySetup() {
   displayLine(3, "from BLE tool.");
 }
 
+void displayServiceMode() {
+  // Font configuration
+  const uint8_t CHAR_SPACING = 2;   // Spacing between characters in pixels
+  const uint8_t STEP = FONT_WIDTH + CHAR_SPACING;  // Total step per character
+
+  // Calculate starting position
+  uint8_t startX = 0;
+  uint8_t startY = 12;
+
+  // Display digits based on current mode
+  if (g_serviceDisplayMode == 0) {
+    // Display: 0 1 2 3 4
+    uint8_t charIndex = 0;
+    drawCustomChar(startX + charIndex * STEP, startY, 0);  // 0
+    charIndex++;
+    drawCustomChar(startX + charIndex * STEP, startY, 1);  // 1
+    charIndex++;
+    drawCustomChar(startX + charIndex * STEP, startY, 2);  // 2
+    charIndex++;
+    drawCustomChar(startX + charIndex * STEP, startY, 3);  // 3
+    charIndex++;
+    drawCustomChar(startX + charIndex * STEP, startY, 4);  // 4
+  } else {
+    // Display: 5 6 7 8 9
+    uint8_t charIndex = 0;
+    drawCustomChar(startX + charIndex * STEP, startY, 5);  // 5
+    charIndex++;
+    drawCustomChar(startX + charIndex * STEP, startY, 6);  // 6
+    charIndex++;
+    drawCustomChar(startX + charIndex * STEP, startY, 7);  // 7
+    charIndex++;
+    drawCustomChar(startX + charIndex * STEP, startY, 8);  // 8
+    charIndex++;
+    drawCustomChar(startX + charIndex * STEP, startY, 9);  // 9
+  }
+}
+
 void updateDisplay(const char* msg) {
   display.clear();
   switch (g_currentAppState) {
 
     case SETUP:
       displaySetup();
+      break;
+    case SERVICE:
+      displayServiceMode();
       break;
     default:
       if (DEV_MODE) {

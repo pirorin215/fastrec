@@ -78,7 +78,8 @@ const unsigned long BUTTON_DEBOUNCE_MS = 50; // Debounce time for recording butt
   X(IDLE,   "IDLE"), \
   X(REC,    "REC"), \
   X(DSLEEP, "DSLEEP"), \
-  X(SETUP,  "SETUP")
+  X(SETUP,  "SETUP"), \
+  X(SERVICE, "SERVICE")
 // このコメントを消したり、ここにコードを書いたりしてはいけない
 
 #define APP_STATE_ENUM(name, str) name
@@ -184,8 +185,12 @@ volatile bool g_is_ai_recording = false;  // AI mode flag
 // ble setting
 volatile bool g_start_file_transfer = false;
 std::string g_file_to_transfer_name;
-int g_chunk_burst_size = 8; 
+int g_chunk_burst_size = 8;
 std::string g_lastBleCommand;
+
+// service mode
+extern int g_serviceDisplayMode;
+extern const int NUM_SERVICE_MODES;
 
 // Function Prototypes ---
 

@@ -24,9 +24,15 @@ const AppState validTransitions[][2] = {
     {IDLE, REC},
     {REC, IDLE},
     {IDLE, DSLEEP},
-    {SETUP, DSLEEP}
+    {SETUP, DSLEEP},
+    {IDLE, SERVICE},
+    {SERVICE, IDLE}
 };
 const size_t NUM_VALID_TRANSITIONS = sizeof(validTransitions) / sizeof(validTransitions[0]);
+
+// Service mode variables
+int g_serviceDisplayMode = 0;  // 0: 01234, 1: 56789
+const int NUM_SERVICE_MODES = 2;
 
 void setAppState(AppState newState, bool applyDebounce=true) {
   static unsigned long lastStateChangeTime = 0; // 状態変更のデバウンス用
@@ -383,6 +389,13 @@ void handleIdle() {
     lastDisplayUpdateTime = millis();
   }
 
+  // Check if both buttons are pressed simultaneously (service mode entry)
+  if (digitalRead(REC_BUTTON_GPIO) == HIGH && digitalRead(AI_BUTTON_GPIO) == HIGH) {
+    setLcdBrightness(0xFF);
+    setAppState(SERVICE);
+    return;
+  }
+
   if (digitalRead(REC_BUTTON_GPIO) == HIGH) {
     setLcdBrightness(0xFF);
     g_is_ai_recording = false;
@@ -442,7 +455,7 @@ void handleRec() {
 
 void handleSetup() {
   static unsigned long lastDisplayUpdateTime = 0;
-      
+
   start_ble_advertising();
 
   if (millis() - lastDisplayUpdateTime > 200) {
@@ -454,6 +467,48 @@ void handleSetup() {
   if ((millis() - g_lastActivityTime > DEEP_SLEEP_DELAY_MS) && (!isBLEConnected() || g_audioFileCount == 0)) {
     setAppState(DSLEEP, false);
   }
+}
+
+void handleService() {
+  static unsigned long lastDisplayUpdateTime = 0;
+  static bool lastRecButtonState = false;  // Previous REC button state
+  static bool lastBothButtonState = false; // Previous both buttons state
+  static unsigned long lastButtonChangeTime = 0;
+
+  // Update display
+  if (millis() - lastDisplayUpdateTime > 200) {
+    updateDisplay("");
+    lastDisplayUpdateTime = millis();
+  }
+
+  // Check if both buttons are pressed (exit service mode)
+  bool currentBothButtonState = (digitalRead(REC_BUTTON_GPIO) == HIGH && digitalRead(AI_BUTTON_GPIO) == HIGH);
+
+  if (currentBothButtonState && !lastBothButtonState) {
+    // Both buttons pressed - exit service mode
+    if (millis() - lastButtonChangeTime >= BUTTON_DEBOUNCE_MS) {
+      setAppState(IDLE);
+      return;
+    }
+  }
+
+  // Detect REC button press to cycle display modes
+  bool currentRecButtonState = (digitalRead(REC_BUTTON_GPIO) == HIGH);
+
+  if (currentRecButtonState && !lastRecButtonState) {
+    // REC button press detected - check debounce
+    if (millis() - lastButtonChangeTime >= BUTTON_DEBOUNCE_MS) {
+      // Cycle through display modes
+      g_serviceDisplayMode = (g_serviceDisplayMode + 1) % NUM_SERVICE_MODES;
+      lastButtonChangeTime = millis();
+    }
+  }
+
+  lastRecButtonState = currentRecButtonState;
+  lastBothButtonState = currentBothButtonState;
+
+  // Reset activity timer while in service mode
+  g_lastActivityTime = millis();
 }
 
 void wakeupLogic() {
@@ -590,6 +645,9 @@ void loop() {
       break;
     case SETUP:
       handleSetup();
+      break;
+    case SERVICE:
+      handleService();
       break;
     case DSLEEP:
       goDeepSleep();
