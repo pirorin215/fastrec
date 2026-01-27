@@ -17,7 +17,7 @@ const int LINE_HEIGHT = 10;  // Assuming 10 pixels per line for font size 5
 
 // Draw a single digit or colon using custom font (FONT_WIDTH x FONT_HEIGHT pixels)
 void drawCustomChar(uint8_t x, uint8_t y, uint8_t charIndex) {
-  if (charIndex > 10) return;  // Font has 11 characters (0-9 and :)
+  if (charIndex > 17) return;  // Font has 18 characters (0-9, :, and 7 weekday symbols)
 
   const uint8_t *font = &largeFont[charIndex][0];
 
@@ -186,6 +186,12 @@ void displayNormalMode() {
   uint8_t hours = timeinfo.tm_hour;
   uint8_t minutes = timeinfo.tm_min;
 
+  // Get weekday (tm_wday: 0=Sunday, 1=Monday, ..., 6=Saturday)
+  uint8_t weekday = timeinfo.tm_wday;
+
+  // Weekday symbols are at indices 11-17 (0=Sun->11, 6=Sat->17)
+  uint8_t weekdaySymbol = weekday + 11;
+
   // Font configuration
   const uint8_t CHAR_SPACING = 2;   // Spacing between characters in pixels
   const uint8_t STEP = FONT_WIDTH + CHAR_SPACING;  // Total step per character
@@ -201,7 +207,7 @@ void displayNormalMode() {
   charIndex++;
   drawCustomChar(startX + charIndex * STEP, startY, hours % 10);      // H2
   charIndex++;
-  drawCustomChar(startX + charIndex * STEP, startY, 10);              // :
+  drawCustomChar(startX + charIndex * STEP, startY, weekdaySymbol);   // 曜日記号
   charIndex++;
   drawCustomChar(startX + charIndex * STEP, startY, minutes / 10);    // M1
   charIndex++;
@@ -224,7 +230,7 @@ void displayServiceMode() {
   uint8_t startX = 0;
   uint8_t startY = 12;
 
-  // Display digits based on current mode
+  // Display based on current mode
   if (g_serviceDisplayMode == 0) {
     // Display: 0 1 2 3 4
     uint8_t charIndex = 0;
@@ -237,7 +243,7 @@ void displayServiceMode() {
     drawCustomChar(startX + charIndex * STEP, startY, 3);  // 3
     charIndex++;
     drawCustomChar(startX + charIndex * STEP, startY, 4);  // 4
-  } else {
+  } else if (g_serviceDisplayMode == 1) {
     // Display: 5 6 7 8 9
     uint8_t charIndex = 0;
     drawCustomChar(startX + charIndex * STEP, startY, 5);  // 5
@@ -249,6 +255,19 @@ void displayServiceMode() {
     drawCustomChar(startX + charIndex * STEP, startY, 8);  // 8
     charIndex++;
     drawCustomChar(startX + charIndex * STEP, startY, 9);  // 9
+  } else {
+    // Modes 2-8: Display weekday symbols
+    uint8_t weekdaySymbol = g_serviceDisplayMode + 9;  // 2→11(Sun), 8→17(Sat)
+    uint8_t charIndex = 0;
+    drawCustomChar(startX + charIndex * STEP, startY, 1);  // 1
+    charIndex++;
+    drawCustomChar(startX + charIndex * STEP, startY, 2);  // 2
+    charIndex++;
+    drawCustomChar(startX + charIndex * STEP, startY, weekdaySymbol);
+    charIndex++;
+    drawCustomChar(startX + charIndex * STEP, startY, 3);  // 3
+    charIndex++;
+    drawCustomChar(startX + charIndex * STEP, startY, 4);  // 4
   }
 }
 

@@ -31,8 +31,8 @@ const AppState validTransitions[][2] = {
 const size_t NUM_VALID_TRANSITIONS = sizeof(validTransitions) / sizeof(validTransitions[0]);
 
 // Service mode variables
-int g_serviceDisplayMode = 0;  // 0: 01234, 1: 56789
-const int NUM_SERVICE_MODES = 2;
+int g_serviceDisplayMode = 0;  // 0: 1234, 1: 1234, 2-8: 曜日記号確認 (日-土)
+const int NUM_SERVICE_MODES = 10;
 
 void setAppState(AppState newState, bool applyDebounce=true) {
   static unsigned long lastStateChangeTime = 0; // 状態変更のデバウンス用
