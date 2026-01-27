@@ -46,8 +46,13 @@ class BleConnectionManager(
     // val connectionState = _connectionState.asStateFlow() // No longer exposed
 
     init {
+        // Initialize connection state to Disconnected to ensure clean state on app start
+        _connectionStateFlow.value = ConnectionState.Disconnected
+        logManager.addDebugLog("BleConnectionManager: Initialized with state=Disconnected")
+
         // Collect connection state from the repository
         repository.connectionState.onEach { state ->
+            logManager.addDebugLog("BleConnectionManager: Repository state changed to $state")
             // Update the external flow directly
             _connectionStateFlow.value = state
 

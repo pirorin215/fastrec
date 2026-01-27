@@ -75,6 +75,7 @@ class BleScanService : Service() {
         Log.d(TAG, "BleScanService onStartCommand")
         startForeground(NOTIFICATION_ID, buildNotification().build()) // Moved here
         startBleScan()
+
         return START_STICKY // サービスが強制終了されても再起動する
     }
 
@@ -168,7 +169,7 @@ class BleScanService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("FastRecMob")
             .setContentText("バックグラウンドでBLEデバイスをスキャン中...")
-            .setSmallIcon(R.mipmap.ic_launcher_round) // 適切なアイコンを設定
+            .setSmallIcon(R.drawable.ic_notification_icon) // カスタム通知アイコン
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
     }

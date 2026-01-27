@@ -223,7 +223,7 @@ class TranscriptionManager(
 
         val notification = NotificationCompat.Builder(context, TRANSCRIPTION_CHANNEL_ID)
             .setContentTitle(transcriptionText.take(50))
-            .setSmallIcon(R.mipmap.ic_launcher_round)
+            .setSmallIcon(R.drawable.ic_notification_transcription)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)

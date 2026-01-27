@@ -13,6 +13,7 @@ const uint8_t FONT_HEIGHT = 28;   // Height of each character in rows
 const int MAX_CHARS_PER_LINE = 15;
 const int FONT_SIZE = 5;
 const int LINE_HEIGHT = 10;  // Assuming 10 pixels per line for font size 5
+const int MAX_BLE_CMD_DISPLAY_LEN = 7;
 
 
 // Draw a single digit or colon using custom font (FONT_WIDTH x FONT_HEIGHT pixels)
@@ -53,8 +54,9 @@ void drawBatteryBar(int batteryLevel) {
   const uint8_t gapWidth = 1;
   const uint8_t numSegments = 5;
 
-  // Calculate how many segments to fill (20% per segment)
-  uint8_t segmentsToFill = (batteryLevel / 20);
+  // Calculate how many segments to fill
+  // 0-9%: 0, 10-29%: 1, 30-49%: 2, 50-69%: 3, 70-89%: 4, 90-100%: 5
+  uint8_t segmentsToFill = (batteryLevel + 10) / 20;
   if (segmentsToFill > numSegments) segmentsToFill = numSegments;
 
   // Draw segments from right to left
@@ -107,30 +109,31 @@ void displayLine(uint8_t lineNumber, const char* text) {
 void displayTopRow() {
   // Calculate Battery Level
   int batteryLevel = (int)(((g_currentBatteryVoltage - BAT_VOL_MIN) / 1.0) * 100);
-  if (batteryLevel < 0) batteryLevel = 0;
-  if (batteryLevel > 100) batteryLevel = 100;
+  batteryLevel = constrain(batteryLevel, 0, 100);
 
-  char line1[MAX_CHARS_PER_LINE+1];
+  char line1[MAX_CHARS_PER_LINE + 1];
+  int offset = 0;
 
+  // Build status text
   if (isBLEConnected()) {
-    std::string displayBleCommand = "";
+    std::string displayBleCommand = "BLE";
     if (!g_lastBleCommand.empty()) {
-      displayBleCommand = g_lastBleCommand.substr(0, 7);
+      displayBleCommand = g_lastBleCommand.substr(0, MAX_BLE_CMD_DISPLAY_LEN);
     }
-    strncpy(line1, displayBleCommand.c_str(), 7);
-    line1[7] = '\0';
+    offset += snprintf(line1 + offset, sizeof(line1) - offset, "%s", displayBleCommand.c_str());
   } else {
     const char* appStateToDisplay = appStateStrings[g_currentAppState];
-    snprintf(line1, sizeof(line1), "% -*s", MAX_CHARS_PER_LINE, appStateToDisplay);
+    offset += snprintf(line1 + offset, sizeof(line1) - offset, "%s", appStateToDisplay);
   }
+
+  // Append '*' if audio files exist
+  if (countAudioFiles() > 0 && offset < sizeof(line1) - 1) {
+    snprintf(line1 + offset, sizeof(line1) - offset, "*");
+  }
+
   displayLine(0, line1);
 
-  // Draw '*' icon if audio files exist (x=43, before battery bar)
-  if (countAudioFiles() > 0) {
-    display.drawChar(43, 0, '*', FONT_SIZE);
-  }
-
-  // Draw battery bar at top-right (draw last to be on top)
+  // Draw battery bar at top-right (special rendering)
   drawBatteryBar(batteryLevel);
 }
 

@@ -125,7 +125,7 @@ class BleDeviceCommandManager(
         val notification = NotificationCompat.Builder(context, LOW_VOLTAGE_CHANNEL_ID)
             .setContentTitle(context.getString(R.string.low_voltage_notification_title))
             .setContentText(context.getString(R.string.low_voltage_notification_text, voltage, threshold))
-            .setSmallIcon(R.mipmap.ic_launcher_round)
+            .setSmallIcon(R.drawable.ic_notification_alert)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)

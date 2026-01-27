@@ -75,7 +75,7 @@ const unsigned long BUTTON_DEBOUNCE_MS = 50; // Debounce time for recording butt
 
 // App States
 #define X_APP_STATES(X) \
-  X(IDLE,   "IDLE"), \
+  X(IDLE,   ""), \
   X(REC,    "REC"), \
   X(DSLEEP, "DSLEEP"), \
   X(SETUP,  "SETUP"), \
