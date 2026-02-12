@@ -347,8 +347,13 @@ int adpcm_decode_block (int16_t *outbuf, const uint8_t *inbuf, size_t inbufsize,
  *outbuf++ = pcmdata[ch] = (int16_t) (inbuf [0] | (inbuf [1] << 8));
  index[ch] = inbuf [2];
 
- if (index [ch] < 0 || index [ch] > 88 || inbuf [3]) // sanitize the input a little...
- return 0;
+    // Sanitize input - be more permissive with non-standard ADPCM files
+    if (index [ch] < 0 || index [ch] > 88) {
+ // Clamp step index to valid range instead of failing
+ index[ch] = (index [ch] < 0) ? 0 : 88;
+    }
+ // Note: We ignore inbuf[3] (reserved byte) to support non-standard WAV files
+ // Android MediaPlayer can play these files, so we should decode them too
 
  inbufsize -= 4;
  inbuf += 4;

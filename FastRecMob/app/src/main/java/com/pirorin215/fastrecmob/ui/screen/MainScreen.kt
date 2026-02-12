@@ -68,6 +68,7 @@ fun MainScreen(
     var showGoogleTasksSyncSettings by remember { mutableStateOf(false) } // New state for GoogleTasksSyncSettingsScreen
     var showDeviceHistoryScreen by remember { mutableStateOf(false) }
     var showWavSaveFolderDialog by remember { mutableStateOf(false) } // New state for WAV save folder dialog
+    var showAdpcmTestScreen by remember { mutableStateOf(false) } // New state for AdpcmTestScreen
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -139,6 +140,9 @@ fun MainScreen(
         }
         showDeviceHistoryScreen -> {
             DeviceHistoryScreen(onBackClick = { showDeviceHistoryScreen = false })
+        }
+        showAdpcmTestScreen -> {
+            AdpcmTestScreen(onBack = { showAdpcmTestScreen = false })
         }
         else -> {
             Scaffold(
@@ -241,6 +245,14 @@ fun MainScreen(
                                     text = { Text(stringResource(R.string.menu_wav_save_folder)) },
                                     onClick = {
                                         showWavSaveFolderDialog = true
+                                        expanded = false
+                                    }
+                                )
+
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.menu_adpcm_test)) },
+                                    onClick = {
+                                        showAdpcmTestScreen = true
                                         expanded = false
                                     }
                                 )

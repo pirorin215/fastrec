@@ -73,6 +73,22 @@ class BleScanService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "BleScanService onStartCommand")
+
+        // Android 14以降でconnectedDeviceタイプのforeground serviceには権限が必要
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val hasBluetoothConnect = checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+            val hasBluetoothScan = checkSelfPermission(android.Manifest.permission.BLUETOOTH_SCAN) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+
+            if (!hasBluetoothConnect && !hasBluetoothScan) {
+                Log.e(TAG, "Bluetooth permissions not granted. Cannot start foreground service.")
+                // 権限がない場合はforeground serviceを開始せず、サービスを停止
+                stopSelf()
+                return START_NOT_STICKY
+            }
+        }
+
         startForeground(NOTIFICATION_ID, buildNotification().build()) // Moved here
         startBleScan()
 
@@ -172,5 +188,6 @@ class BleScanService : Service() {
             .setSmallIcon(R.drawable.ic_notification_icon) // カスタム通知アイコン
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setOngoing(true) // 通知を削除不可にする（フォアグラウンドサービス維持のため）
     }
 } // Final closing brace for BleScanService class.

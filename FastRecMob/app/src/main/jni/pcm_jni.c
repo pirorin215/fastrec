@@ -434,6 +434,155 @@ end:
     return result;
 }
 
+// Test function to decode ADPCM file and return bytes read
+// Returns: >= 0 on success (number of bytes read), < 0 on failure
+JNIEXPORT jint JNICALL Java_com_pirorin215_fastrecmob_viewModel_MainViewModel_testDecodeAdpcmNative
+  (JNIEnv *env, jobject obj, jstring inputFileName) {
+
+    const char *input_path = (*env)->GetStringUTFChars(env, inputFileName, 0);
+    FILE *in_file = NULL;
+    uint8_t *in_block_buffer = NULL;
+    int16_t *out_block_buffer = NULL;
+    int result = -1;  // Default to failure
+    size_t total_adpcm_data_read = 0;
+    size_t adpcm_data_size = 0;
+    int channels = 1;
+    int adpcm_block_align = 256;
+    int sample_rate = 0;
+
+    LOGD("Testing ADPCM decode for: %s", input_path);
+
+    in_file = fopen(input_path, "rb");
+    if (in_file == NULL) {
+        LOGE("Failed to open input file: %s", input_path);
+        goto end;
+    }
+
+    // Read and verify RIFF header
+    RiffChunkHeader riff_header;
+    if (fread(&riff_header, 1, sizeof(RiffChunkHeader), in_file) != sizeof(RiffChunkHeader)) {
+        LOGE("Failed to read RIFF header.");
+        goto end;
+    }
+
+    if (memcmp(riff_header.chunk_id, "RIFF", 4) != 0) {
+        LOGE("Not a RIFF file.");
+        goto end;
+    }
+
+    // Skip "WAVE" ID
+    char wave_id[4];
+    if (fread(wave_id, 1, 4, in_file) != 4) {
+        LOGE("Failed to read WAVE ID.");
+        goto end;
+    }
+
+    if (memcmp(wave_id, "WAVE", 4) != 0) {
+        LOGE("Not a WAVE file.");
+        goto end;
+    }
+
+    // Read fmt chunk
+    ChunkHeader fmt_chunk;
+    if (fread(&fmt_chunk, 1, sizeof(ChunkHeader), in_file) != sizeof(ChunkHeader)) {
+        LOGE("Failed to read fmt chunk header.");
+        goto end;
+    }
+
+    if (memcmp(fmt_chunk.chunk_id, "fmt ", 4) != 0) {
+        LOGE("Expected fmt chunk.");
+        goto end;
+    }
+
+    // Read wave format
+    uint16_t format_tag;
+    uint16_t block_align;
+    uint16_t bits_per_sample;
+
+    fread(&format_tag, 1, sizeof(uint16_t), in_file);
+    fread(&channels, 1, sizeof(uint16_t), in_file);
+    fread(&sample_rate, 1, sizeof(uint32_t), in_file);
+    // Skip bytes_per_second
+    fseek(in_file, 4, SEEK_CUR);
+    fread(&block_align, 1, sizeof(uint16_t), in_file);
+    fread(&bits_per_sample, 1, sizeof(uint16_t), in_file);
+
+    adpcm_block_align = block_align;
+
+    // Skip remaining fmt bytes
+    int remaining_fmt = little_endian_to_native(fmt_chunk.chunk_size) - 16;
+    if (remaining_fmt > 0) {
+        fseek(in_file, remaining_fmt, SEEK_CUR);
+    }
+
+    LOGD("Audio format: channels=%d, sample_rate=%d, block_align=%d", channels, sample_rate, adpcm_block_align);
+
+    // Find data chunk (skip other chunks like fact)
+    int found_data = 0;
+    while (!found_data) {
+        ChunkHeader chunk;
+        if (fread(&chunk, 1, sizeof(ChunkHeader), in_file) != sizeof(ChunkHeader)) {
+            LOGE("Failed to read chunk header.");
+            goto end;
+        }
+
+        if (memcmp(chunk.chunk_id, "data", 4) == 0) {
+            adpcm_data_size = little_endian_to_native(chunk.chunk_size);
+            found_data = 1;
+            LOGD("Found data chunk, size: %zu bytes", adpcm_data_size);
+        } else {
+            // Skip this chunk
+            uint32_t chunk_size = little_endian_to_native(chunk.chunk_size);
+            LOGD("Skipping chunk: %.4s, size: %u", chunk.chunk_id, chunk_size);
+            fseek(in_file, chunk_size, SEEK_CUR);
+        }
+    }
+
+    // Allocate buffers
+    in_block_buffer = (uint8_t *)malloc(adpcm_block_align);
+    out_block_buffer = (int16_t *)malloc(adpcm_block_align * 4);  // Worst case expansion
+
+    if (in_block_buffer == NULL || out_block_buffer == NULL) {
+        LOGE("Failed to allocate buffers.");
+        goto end;
+    }
+
+    // Decode all blocks
+    while (total_adpcm_data_read < adpcm_data_size) {
+        size_t bytes_to_read = adpcm_block_align;
+        if (total_adpcm_data_read + bytes_to_read > adpcm_data_size) {
+            bytes_to_read = adpcm_data_size - total_adpcm_data_read;
+        }
+
+        size_t bytes_read = fread(in_block_buffer, 1, bytes_to_read, in_file);
+        if (bytes_read == 0) {
+            LOGD("EOF reached during decode test.");
+            break;
+        }
+
+        int decoded_samples = adpcm_decode_block(out_block_buffer, in_block_buffer, bytes_read, channels);
+        if (decoded_samples == 0) {
+            LOGE("ADPCM decode block failed at offset %zu.", total_adpcm_data_read);
+            result = -1;
+            goto end;
+        }
+
+        total_adpcm_data_read += bytes_read;
+    }
+
+    LOGD("ADPCM decode test successful. Total ADPCM data read: %zu, Total expected: %zu",
+            total_adpcm_data_read, adpcm_data_size);
+    result = (int)total_adpcm_data_read;
+
+end:
+    if (in_file) fclose(in_file);
+    if (in_block_buffer) free(in_block_buffer);
+    if (out_block_buffer) free(out_block_buffer);
+
+    (*env)->ReleaseStringUTFChars(env, inputFileName, input_path);
+    return result;
+}
+
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     g_JavaVM = vm;
     LOGD("JNI_OnLoad called.");

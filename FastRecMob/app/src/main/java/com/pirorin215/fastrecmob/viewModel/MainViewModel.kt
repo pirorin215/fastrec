@@ -25,13 +25,31 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+// Data class for ADPCM decode test results
+data class AdpcmTestResult(
+    val success: Boolean,
+    val filePath: String,
+    val bytesRead: Int,
+    val bytesExpected: Int,
+    val message: String
+)
+
 @SuppressLint("MissingPermission")
 class MainViewModel(
     private val application: Application
 ) : ViewModel() {
 
     companion object {
-        const val TAG = "MainViewModel"
+        private const val TAG = "MainViewModel"
+
+        init {
+            try {
+                System.loadLibrary("adpcm")
+                Log.d(TAG, "Native library 'adpcm' loaded successfully.")
+            } catch (e: UnsatisfiedLinkError) {
+                Log.e(TAG, "Failed to load native library 'adpcm': ${e.message}")
+            }
+        }
     }
 
     private val mainApplication = application as MainApplication
@@ -158,7 +176,27 @@ class MainViewModel(
     }
     fun retranscribe(result: TranscriptionResult) = transcriptionManager.retranscribe(result)
     fun addManualTranscription(text: String) = transcriptionManager.addManualTranscription(text)
-    
+
+    // --- ADPCM Decode Test ---
+    fun testDecodeAdpcmFile(filePath: String): AdpcmTestResult {
+        val result = testDecodeAdpcmNative(filePath)
+        val success = result >= 0
+        val message = if (success) {
+            "Decoded successfully"
+        } else {
+            "Decode failed with error code: $result"
+        }
+        return AdpcmTestResult(
+            success = success,
+            filePath = filePath,
+            bytesRead = if (success) result else 0,
+            bytesExpected = java.io.File(filePath).length().toInt(),
+            message = message
+        )
+    }
+
+    private external fun testDecodeAdpcmNative(filePath: String): Int
+
     fun stopAppServices() {
         Log.d(TAG, "Stopping all app services...")
         // Stop BLE connection and release resources
