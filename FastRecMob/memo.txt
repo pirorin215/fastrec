@@ -1,5 +1,6 @@
 ./gradlew clean
 ./gradlew --stop
 ./gradlew assembleDebug
+./gradlew test
 ./gradlew assembleDebug --no-configuration-cache --no-build-cache
 ./gradlew installDebug
