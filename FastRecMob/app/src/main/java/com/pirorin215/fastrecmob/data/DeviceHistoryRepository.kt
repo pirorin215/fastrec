@@ -105,4 +105,32 @@ class DeviceHistoryRepository(private val context: Context) {
             preferences[PreferencesKeys.DEVICE_HISTORY_LIST] = json.encodeToString(filteredList)
         }
     }
+
+    /**
+     * 指定した期間より古いエントリを削除する
+     * @param retentionPeriodMs 保持期間（ミリ秒）
+     */
+    suspend fun deleteOldEntries(retentionPeriodMs: Long) {
+        context.deviceHistoryDataStore.edit { preferences ->
+            val jsonString = preferences[PreferencesKeys.DEVICE_HISTORY_LIST] ?: "[]"
+            val currentList = try {
+                json.decodeFromString<MutableList<DeviceHistoryEntry>>(jsonString)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                mutableListOf()
+            }
+
+            val cutoffTime = System.currentTimeMillis() - retentionPeriodMs
+            
+            // 保持期間内のデータのみを残す
+            val filteredList = currentList.filter { entry ->
+                entry.timestamp >= cutoffTime
+            }
+
+            // 変更がある場合のみ保存
+            if (filteredList.size < currentList.size) {
+                preferences[PreferencesKeys.DEVICE_HISTORY_LIST] = json.encodeToString(filteredList)
+            }
+        }
+    }
 }

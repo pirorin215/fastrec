@@ -83,6 +83,11 @@ class TranscriptionManager(
                 resultManager.updateLocalAudioFileCount()
             }
             .launchIn(scope)
+
+        // アプリ起動時に古いキャッシュを整理
+        scope.launch {
+            cleanupTranscriptionResultsAndAudioFiles()
+        }
     }
 
     // ========== 公開API（既存コードとの互換性維持）==========

@@ -76,7 +76,7 @@ class BleDeviceManager(
 
     // --- 内部プロパティ ---
     private val json = Json { ignoreUnknownKeys = true }
-    private val responseBuffer = StringBuilder()
+    private val rawResponseBuffer = java.io.ByteArrayOutputStream()
     private var currentCommandCompletion: CompletableDeferred<Pair<Boolean, String?>>? = null
     private var timeSyncJob: Job? = null
 
@@ -102,7 +102,7 @@ class BleDeviceManager(
 
             try {
                 _currentOperation.value = BleOperation.SENDING_TIME
-                responseBuffer.clear()
+                rawResponseBuffer.reset()
                 val timeCompletion = CompletableDeferred<Pair<Boolean, String?>>()
                 currentCommandCompletion = timeCompletion
 
@@ -200,7 +200,7 @@ class BleDeviceManager(
 
                 // 指定回数だけ取得を試行
                 repeat(retryCount) { attemptIndex ->
-                    responseBuffer.clear()
+                    rawResponseBuffer.reset()
 
                     val commandCompletion = CompletableDeferred<Pair<Boolean, String?>>()
                     currentCommandCompletion = commandCompletion
@@ -286,7 +286,7 @@ class BleDeviceManager(
 
             try {
                 _currentOperation.value = BleOperation.FETCHING_FILE_LIST
-                responseBuffer.clear()
+                rawResponseBuffer.reset()
                 val command = "${BleConstants.CMD_GET_FILE_LIST}:$extension"
                 logManager.addLog("ファイルリストを要求中 ($command)...")
 
@@ -339,16 +339,15 @@ class BleDeviceManager(
      * @param operation 現在のBLE操作
      */
     fun handleResponse(value: ByteArray, operation: BleOperation) {
+        // バイトをバッファに結合（文字列化せずにバイトのまま追加）
+        rawResponseBuffer.write(value)
+
         when (operation) {
             BleOperation.FETCHING_DEVICE_INFO -> {
-                val incomingString = value.toString(Charsets.UTF_8).trim()
-                if (responseBuffer.isEmpty() && !incomingString.startsWith("{") && !incomingString.startsWith("ERROR:")) {
-                    return
-                }
-                responseBuffer.append(value.toString(Charsets.UTF_8))
-                val currentBufferAsString = responseBuffer.toString()
+                // 終了判定のために文字列化してチェック（簡易的なチェック）
+                val currentBufferAsString = rawResponseBuffer.toString("UTF-8").trim()
 
-                if (currentBufferAsString.trim().endsWith("}")) {
+                if (currentBufferAsString.isNotEmpty() && currentBufferAsString.endsWith("}")) {
                     logManager.addLog("生のDeviceInfo JSON: $currentBufferAsString")
                     try {
                         val parsedResponse = json.decodeFromString<DeviceInfoResponse>(currentBufferAsString)
@@ -364,18 +363,16 @@ class BleDeviceManager(
                 }
             }
             BleOperation.FETCHING_FILE_LIST -> {
-                val incomingString = value.toString(Charsets.UTF_8).trim()
-                if (responseBuffer.isEmpty() && !incomingString.startsWith("[") && !incomingString.startsWith("ERROR:")) {
-                    if (incomingString == "[]") {
-                        _fileList.value = emptyList()
-                        currentCommandCompletion?.complete(Pair(true, null))
-                    }
+                val currentBufferAsString = rawResponseBuffer.toString("UTF-8").trim()
+
+                // 空の配列チェック
+                if (currentBufferAsString == "[]") {
+                    _fileList.value = emptyList()
+                    currentCommandCompletion?.complete(Pair(true, null))
                     return
                 }
-                responseBuffer.append(value.toString(Charsets.UTF_8))
-                val currentBufferAsString = responseBuffer.toString()
 
-                if (currentBufferAsString.trim().endsWith("]")) {
+                if (currentBufferAsString.endsWith("]")) {
                     try {
                         _fileList.value = parseFileEntries(currentBufferAsString)
                         logManager.addLog("FileList解析完了. 件数: ${_fileList.value.size}")
@@ -391,13 +388,13 @@ class BleDeviceManager(
                 }
             }
             BleOperation.SENDING_TIME -> {
-                val response = value.toString(Charsets.UTF_8).trim()
+                val response = rawResponseBuffer.toString("UTF-8").trim()
                 if (response.startsWith("OK: Time")) {
                     currentCommandCompletion?.complete(Pair(true, null))
-                    responseBuffer.clear()
+                    rawResponseBuffer.reset()
                 } else if (response.startsWith("ERROR:")) {
                     currentCommandCompletion?.complete(Pair(false, response))
-                    responseBuffer.clear()
+                    rawResponseBuffer.reset()
                 } else {
                     logManager.addLog("SET:time 予期しない応答: $response")
                 }

@@ -18,19 +18,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
+import org.koin.androidx.compose.koinViewModel
 import com.pirorin215.fastrecmob.R
 import com.pirorin215.fastrecmob.battery.BatteryPrediction
 import com.pirorin215.fastrecmob.viewModel.DeviceHistoryViewModel
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeviceHistoryScreen(
     onBackClick: () -> Unit,
-    viewModel: DeviceHistoryViewModel = viewModel(factory = DeviceHistoryViewModel.Factory(
-        (LocalContext.current.applicationContext as com.pirorin215.fastrecmob.MainApplication).deviceHistoryRepository
-    ))
+    viewModel: DeviceHistoryViewModel = koinViewModel()
 ) {
     val entries by viewModel.deviceHistoryEntries.collectAsState()
     val entriesForList by viewModel.deviceHistoryEntriesForList.collectAsState()

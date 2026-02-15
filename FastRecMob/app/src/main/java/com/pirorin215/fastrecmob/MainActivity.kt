@@ -1,8 +1,11 @@
 package com.pirorin215.fastrecmob
 
 import com.pirorin215.fastrecmob.viewModel.MainViewModel
-import com.pirorin215.fastrecmob.viewModel.MainViewModelFactory
+import com.pirorin215.fastrecmob.viewModel.TranscriptionViewModel
+import com.pirorin215.fastrecmob.viewModel.BleViewModel
+import com.pirorin215.fastrecmob.viewModel.GoogleTasksViewModel
 import com.pirorin215.fastrecmob.LocationTracker
+import com.pirorin215.fastrecmob.viewModel.AppSettingsViewModel
 
 import android.Manifest
 import android.app.Application
@@ -44,15 +47,19 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pirorin215.fastrecmob.data.AppSettingsRepository
 import com.pirorin215.fastrecmob.data.LastKnownLocationRepository
 import com.pirorin215.fastrecmob.service.BleScanService
 import com.pirorin215.fastrecmob.ui.screen.MainScreen
 import com.pirorin215.fastrecmob.ui.theme.FastRecMobTheme
-import com.pirorin215.fastrecmob.viewModel.AppSettingsViewModel
 import com.pirorin215.fastrecmob.viewModel.AppSettingsViewModelFactory
 import com.pirorin215.fastrecmob.viewModel.BleConnectionManager // Add this import
+import org.koin.android.ext.android.get
+import org.koin.android.ext.android.getKoin
+import org.koin.androidx.viewmodel.ext.android.viewModel
 
 import kotlinx.coroutines.flow.MutableSharedFlow // Add this import
 import kotlinx.coroutines.flow.MutableStateFlow // Add this import
@@ -67,13 +74,13 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val application = context.applicationContext as Application
 
-            // ViewModelの生成をFactoryに集約
-            val mainViewModel: MainViewModel = viewModel(factory = MainViewModelFactory(application))
+            // KoinでViewModelをインジェクション
+            val mainViewModel: MainViewModel by viewModel()
             val appSettingsViewModel: AppSettingsViewModel = viewModel(
                 factory = AppSettingsViewModelFactory(
                     application,
-                    (application as MainApplication).appSettingsRepository,
-                    (application as MainApplication).transcriptionManager
+                    get(),
+                    get()
                 )
             )
 

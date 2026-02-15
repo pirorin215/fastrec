@@ -36,7 +36,16 @@ data class AdpcmTestResult(
 
 @SuppressLint("MissingPermission")
 class MainViewModel(
-    private val application: Application
+    private val application: Application,
+    private val bleConnectionManager: BleConnectionManager,
+    private val bleOrchestrator: BleOrchestrator,
+    private val transcriptionManager: TranscriptionManager,
+    private val bleSelectionManager: BleSelectionManager,
+    private val googleTasksIntegration: GoogleTasksManager,
+    private val locationMonitor: LocationMonitor,
+    private val logManager: LogManager,
+    private val transcriptionResultRepository: com.pirorin215.fastrecmob.data.TranscriptionResultRepository,
+    private val appSettingsRepository: com.pirorin215.fastrecmob.data.AppSettingsRepository
 ) : ViewModel() {
 
     companion object {
@@ -51,19 +60,6 @@ class MainViewModel(
             }
         }
     }
-
-    private val mainApplication = application as MainApplication
-
-    // --- Core components from MainApplication ---
-    private val appSettingsRepository = mainApplication.appSettingsRepository
-    private val transcriptionResultRepository = mainApplication.transcriptionResultRepository
-    private val logManager = mainApplication.logManager
-    private val bleConnectionManager = mainApplication.bleConnectionManager
-    private val bleOrchestrator = mainApplication.bleOrchestrator
-    private val transcriptionManager = mainApplication.transcriptionManager
-    private val bleSelectionManager = mainApplication.bleSelectionManager
-    private val googleTasksIntegration = mainApplication.googleTasksIntegration
-    private val locationMonitor = mainApplication.locationMonitor
 
     // --- UI State Flows ---
     val themeMode: StateFlow<ThemeMode> = appSettingsRepository.getFlow(Settings.THEME_MODE)

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import com.pirorin215.fastrecmob.data.AppSettingsRepository
 import com.pirorin215.fastrecmob.data.Settings
 import com.pirorin215.fastrecmob.service.BleScanService
 import kotlinx.coroutines.CoroutineScope
@@ -12,10 +13,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 
-class BootCompletedReceiver : BroadcastReceiver() {
+class BootCompletedReceiver : BroadcastReceiver(), KoinComponent {
 
     private val TAG = "BootCompletedReceiver"
+    private val appSettingsRepository: AppSettingsRepository by inject()
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
@@ -25,13 +29,6 @@ class BootCompletedReceiver : BroadcastReceiver() {
 
             scope.launch {
                 try {
-                    val app = context.applicationContext as? MainApplication
-                    if (app == null) {
-                        Log.e(TAG, "Application is not MainApplication.")
-                        return@launch
-                    }
-
-                    val appSettingsRepository = app.appSettingsRepository
                     val autoStartOnBoot = appSettingsRepository.getFlow(Settings.AUTO_START_ON_BOOT).first()
 
                     if (autoStartOnBoot) {

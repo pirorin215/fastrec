@@ -1,7 +1,7 @@
 [versions]
 vico = "1.14.0"
-agp = "8.11.2"
-kotlin = "2.0.21"
+agp = "8.7.0"
+kotlin = "2.0.0"
 kotlinxSerialization = "1.6.0" # Added kotlinxSerialization version
 coreKtx = "1.16.0"
 junit = "4.13.2"
@@ -22,6 +22,7 @@ datastorePreferences = "1.1.1"
 composereorderable = "0.9.6"
 kotlinxCoroutinesGuava = "1.7.3"
 generativeai = "0.9.0"  # Gemini API
+koin = "3.5.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -60,6 +61,11 @@ generativeai = { group = "com.google.ai.client.generativeai", name = "generative
 vico-compose = { group = "com.patrykandpatrick.vico", name = "compose", version.ref = "vico" }
 vico-compose-m3 = { group = "com.patrykandpatrick.vico", name = "compose-m3", version.ref = "vico" }
 vico-core = { group = "com.patrykandpatrick.vico", name = "core", version.ref = "vico" }
+
+# Koin for DI
+koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = "koin" }
+koin-androidx-compose = { group = "io.insert-koin", name = "koin-androidx-compose", version.ref = "koin" }
+koin-androidx-viewmodel = { group = "io.insert-koin", name = "koin-androidx-viewmodel", version.ref = "koin" }
 
 
 

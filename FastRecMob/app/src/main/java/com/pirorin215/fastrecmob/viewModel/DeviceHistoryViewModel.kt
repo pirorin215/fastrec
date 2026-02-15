@@ -57,6 +57,12 @@ class DeviceHistoryViewModel(
         deviceHistoryEntries.onEach { entries ->
             _homeLocation.value = calculateHomeLocation(entries)
         }.launchIn(viewModelScope)
+
+        // 2週間以上前のデータを削除 (14 days * 24 hours * 60 minutes * 60 seconds * 1000 ms)
+        viewModelScope.launch {
+            val twoWeeksMs = 14L * 24 * 60 * 60 * 1000
+            deviceHistoryRepository.deleteOldEntries(twoWeeksMs)
+        }
     }
 
     /**
