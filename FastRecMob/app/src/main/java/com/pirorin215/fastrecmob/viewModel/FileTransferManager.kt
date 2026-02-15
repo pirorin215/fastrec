@@ -28,6 +28,8 @@ import java.io.OutputStream
 import java.util.UUID
 import com.pirorin215.fastrecmob.data.AppSettingsRepository
 import com.pirorin215.fastrecmob.data.Settings
+import com.pirorin215.fastrecmob.constants.FileTransferConstants
+import com.pirorin215.fastrecmob.bluetooth.device.BleDeviceManager
 
 class FileTransferManager(
     private val context: Context,
@@ -40,13 +42,13 @@ class FileTransferManager(
     private val sendCommandCallback: (String) -> Unit,
     private val sendAckCallback: (ByteArray) -> Unit,
     private val _currentOperation: MutableStateFlow<BleOperation>,
-    private val bleDeviceCommandManager: BleDeviceCommandManager,
+    private val bleDeviceManager: BleDeviceManager,
     private val _connectionState: StateFlow<ConnectionState>,
     private val disconnectSignal: SharedFlow<Unit>,
     private val appSettingsRepository: AppSettingsRepository // Inject AppSettingsRepository
 ) {
 
-    private var chunkBurstSize: Int = 8 // Default value, will be updated from settings
+    private var chunkBurstSize: Int = com.pirorin215.fastrecmob.constants.FileTransferConstants.DEFAULT_CHUNK_BURST_SIZE // Default value, will be updated from settings
 
     init {
         scope.launch {
@@ -65,10 +67,10 @@ class FileTransferManager(
     }
 
     companion object {
-        const val MAX_DELETE_RETRIES = 3
-        const val DELETE_RETRY_DELAY_MS = 1000L
-
-        private const val PACKET_TIMEOUT_MS = 30000L // Timeout if no packet is received for this duration
+        // Constants moved to FileTransferConstants.kt, but kept here for backward compatibility
+        const val MAX_DELETE_RETRIES = FileTransferConstants.MAX_DELETE_RETRIES
+        const val DELETE_RETRY_DELAY_MS = FileTransferConstants.DELETE_RETRY_DELAY_MS
+        const val PACKET_TIMEOUT_MS = FileTransferConstants.PACKET_TIMEOUT_MS
     }
 
     private var chunkCounter = 0
@@ -322,7 +324,7 @@ class FileTransferManager(
                 currentDownloadingFileName = fileName
                 currentCommandCompletion = CompletableDeferred()
 
-                val fileEntry = bleDeviceCommandManager.fileList.value.find { it.name == fileName }
+                val fileEntry = bleDeviceManager.fileList.value.find { it.name == fileName }
                 val fileSize = fileEntry?.size ?: 0L
                 _currentFileTotalSize.value = fileSize
 
@@ -406,7 +408,7 @@ class FileTransferManager(
                     if (success) {
                         logManager.addLog("Deleted from device: $fileName")
                         // Instead of re-fetching the list, remove it from the local state
-                        bleDeviceCommandManager.removeFileFromList(fileName, triggerCallback = false)
+                        bleDeviceManager.removeFileFromList(fileName, triggerCallback = false)
                         transcriptionManager.updateLocalAudioFileCount()
                         break
                     } else if (i < MAX_DELETE_RETRIES) {

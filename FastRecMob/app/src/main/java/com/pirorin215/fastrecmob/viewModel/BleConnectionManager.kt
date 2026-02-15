@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
 import kotlinx.coroutines.flow.MutableSharedFlow // Add this import
+import com.pirorin215.fastrecmob.constants.TimeConstants
 
 @SuppressLint("MissingPermission")
 class BleConnectionManager(
@@ -84,7 +85,7 @@ class BleConnectionManager(
                     // - 実質的な再試行間隔: 約30秒（高頻度リトライではない）
                     // - バッテリー消費: 許容範囲内
                     scope.launch {
-                        delay(500L)
+                        delay(com.pirorin215.fastrecmob.constants.TimeConstants.RECONNECT_DELAY_MS)
                         logManager.addDebugLog("Attempting reconnection...")
                         restartScan(forceScan = true)
                     }

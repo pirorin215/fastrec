@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import com.pirorin215.fastrecmob.constants.TimeConstants
+import com.pirorin215.fastrecmob.constants.LocationConstants
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
@@ -23,9 +25,7 @@ class DeviceHistoryRepository(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
 
     companion object {
-        // Constants for filtering
-        private const val TIME_THRESHOLD_MS = 30 * 60 * 1000L // 30 minutes in milliseconds
-        private const val LOCATION_THRESHOLD_SQUARED = 0.000001 // Approx 11m squared difference for lat/lon
+        // Constants moved to TimeConstants.kt and LocationConstants.kt
     }
 
     val deviceHistoryFlow: Flow<List<DeviceHistoryEntry>> = context.deviceHistoryDataStore.data
@@ -65,13 +65,13 @@ class DeviceHistoryRepository(private val context: Context) {
                     val latDiff = newLat - lastLat
                     val lonDiff = newLon - lastLon
                     val distanceSquared = latDiff * latDiff + lonDiff * lonDiff
-                    distanceSquared < LOCATION_THRESHOLD_SQUARED
+                    distanceSquared < LocationConstants.LOCATION_THRESHOLD_SQUARED
                 } else {
                     false // If location data is incomplete, assume not similar enough to block
                 }
 
                 // Only prevent adding if BOTH time is within threshold AND location is similar
-                if (timeDiff < TIME_THRESHOLD_MS && locationIsSimilar) {
+                if (timeDiff < TimeConstants.DEVICE_HISTORY_TIME_THRESHOLD_MS && locationIsSimilar) {
                     return@edit // Don't add if within 30 minutes AND location is too similar
                 }
             }

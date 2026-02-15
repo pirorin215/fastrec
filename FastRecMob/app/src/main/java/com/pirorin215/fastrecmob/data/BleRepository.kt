@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch // Add this import
 import java.util.UUID
+import com.pirorin215.fastrecmob.constants.TimeConstants
+import com.pirorin215.fastrecmob.bluetooth.constants.BleConstants
 
 sealed class ConnectionState {
     object Disconnected : ConnectionState()
@@ -46,11 +48,11 @@ sealed class BleEvent {
 class BleRepository(private val context: Context) {
 
     companion object {
-        const val SERVICE_UUID_STRING = "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-        const val COMMAND_UUID_STRING = "beb5483e-36e1-4688-b7f5-ea07361b26aa"
-        const val RESPONSE_UUID_STRING = "beb5483e-36e1-4688-b7f5-ea07361b26ab"
-        const val ACK_UUID_STRING = "beb5483e-36e1-4688-b7f5-ea07361b26ac"
-        const val CCCD_UUID_STRING = "00002902-0000-1000-8000-00805f9b34fb"
+        const val SERVICE_UUID_STRING = BleConstants.SERVICE_UUID_STRING
+        const val COMMAND_UUID_STRING = BleConstants.COMMAND_UUID_STRING
+        const val RESPONSE_UUID_STRING = BleConstants.RESPONSE_UUID_STRING
+        const val ACK_UUID_STRING = BleConstants.ACK_UUID_STRING
+        const val CCCD_UUID_STRING = BleConstants.CCCD_UUID_STRING
     }
 
     private val TAG = "BleRepository"
@@ -79,7 +81,7 @@ class BleRepository(private val context: Context) {
                     // MTU request should be initiated by the ViewModel after connection.
                     // For now, we discover services directly. A delay might be needed.
                     repositoryScope.launch {
-                        delay(600) // Recommended delay before service discovery
+                        delay(TimeConstants.SERVICE_DISCOVERY_DELAY_MS) // Recommended delay before service discovery
                         val initiated = gatt.discoverServices()
                         if (!initiated) {
                             Log.e(TAG, "Failed to initiate service discovery.")

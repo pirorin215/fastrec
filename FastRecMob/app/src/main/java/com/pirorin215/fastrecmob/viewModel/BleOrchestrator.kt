@@ -30,10 +30,16 @@ import kotlinx.coroutines.flow.first
 import com.pirorin215.fastrecmob.data.DeviceSettings
 import com.pirorin215.fastrecmob.data.DeviceInfoResponse
 import com.pirorin215.fastrecmob.data.FileEntry
+import com.pirorin215.fastrecmob.constants.TimeConstants
 
 import com.pirorin215.fastrecmob.viewModel.LogManager
 import com.pirorin215.fastrecmob.LocationTracker
 import com.pirorin215.fastrecmob.data.DeviceHistoryRepository
+import com.pirorin215.fastrecmob.bluetooth.constants.BleConstants
+import com.pirorin215.fastrecmob.bluetooth.notification.BleNotificationManager
+import com.pirorin215.fastrecmob.bluetooth.device.BleDeviceManager
+import com.pirorin215.fastrecmob.bluetooth.settings.BleSettingsManager
+import com.pirorin215.fastrecmob.viewModel.NavigationEvent
 
 class BleOrchestrator(
     private val scope: CoroutineScope,
@@ -78,26 +84,47 @@ class BleOrchestrator(
     private val _navigationEvent = MutableSharedFlow<NavigationEvent>()
     val navigationEvent = _navigationEvent.asSharedFlow()
 
-    internal val bleDeviceCommandManager by lazy {
-        BleDeviceCommandManager(
-            scope = scope,
+    // 通知マネージャーの初期化
+    private val notificationManager by lazy {
+        BleNotificationManager(
             context = context,
+            appSettingsRepository = appSettingsRepository,
+            logManager = logManager
+        )
+    }
+
+    // デバイスマネージャーの初期化
+    internal val bleDeviceManager by lazy {
+        BleDeviceManager(
+            scope = scope,
             sendCommand = { command -> sendCommand(command) },
             logManager = logManager,
             _currentOperation = _currentOperation,
             bleMutex = bleMutex,
             onFileListUpdated = { checkForNewWavFilesAndProcess() },
-            _navigationEvent = _navigationEvent,
+            notificationManager = notificationManager,
             locationTracker = locationTracker,
             deviceHistoryRepository = deviceHistoryRepository,
             appSettingsRepository = appSettingsRepository
         )
     }
 
-    // --- Delegated Properties from Managers ---
-    val fileList: StateFlow<List<com.pirorin215.fastrecmob.data.FileEntry>> get() = bleDeviceCommandManager.fileList
-    val deviceInfo: StateFlow<com.pirorin215.fastrecmob.data.DeviceInfoResponse?> get() = bleDeviceCommandManager.deviceInfo
-    val deviceSettings: StateFlow<com.pirorin215.fastrecmob.data.DeviceSettings> get() = bleDeviceCommandManager.deviceSettings
+    // 設定マネージャーの初期化
+    private val bleSettingsManager by lazy {
+        BleSettingsManager(
+            scope = scope,
+            sendCommand = { command -> sendCommand(command) },
+            logManager = logManager,
+            _currentOperation = _currentOperation,
+            bleMutex = bleMutex,
+            _navigationEvent = _navigationEvent
+        )
+    }
+
+    // --- マネージャーの委譲プロパティ ---
+    val fileList: StateFlow<List<com.pirorin215.fastrecmob.data.FileEntry>> get() = bleDeviceManager.fileList
+    val deviceInfo: StateFlow<com.pirorin215.fastrecmob.data.DeviceInfoResponse?> get() = bleDeviceManager.deviceInfo
+    val deviceSettings: StateFlow<com.pirorin215.fastrecmob.data.DeviceSettings> get() = bleSettingsManager.deviceSettings
 
     private val fileTransferManager by lazy {
         FileTransferManager(
@@ -116,7 +143,7 @@ class BleOrchestrator(
             sendCommandCallback = { command -> sendCommand(command) },
             sendAckCallback = { ackValue -> sendAck(ackValue) },
             _currentOperation = _currentOperation,
-            bleDeviceCommandManager = bleDeviceCommandManager,
+            bleDeviceManager = bleDeviceManager,
             _connectionState = connectionStateFlow,
             disconnectSignal = disconnectSignal,
             appSettingsRepository = appSettingsRepository
@@ -161,12 +188,12 @@ class BleOrchestrator(
             }
         }.launchIn(scope)
     }
-    
+
     fun stop() {
-        bleDeviceCommandManager.stopTimeSyncJob()
+        bleDeviceManager.stopTimeSyncJob()
         fileListRetryJob?.cancel()
         fileListRetryJob = null
-        addLog("Orchestrator stopped.")
+        addLog("オーケストレーターを停止しました")
     }
 
     fun addLog(message: String, level: LogLevel = LogLevel.INFO) {
@@ -184,52 +211,52 @@ class BleOrchestrator(
 
     private fun startFullSync() {
         scope.launch {
-            addLog("Fetching file list")
-            val success = bleDeviceCommandManager.fetchFileList(connectionStateFlow.value)
+            addLog("ファイルリストを取得中")
+            val success = bleDeviceManager.fetchFileList(connectionStateFlow.value)
 
             if (!success) {
-                // Device may be busy (recording), start retry with short intervals
-                addLog("File list fetch failed, starting retry (device may be recording)")
+                // デバイスが録音中の場合、短いインターバルでリトライ
+                addLog("ファイルリストの取得に失敗しました。リトライを開始します（デバイスが録音中の可能性があります）")
                 startFileListRetry()
             }
         }
     }
 
     /**
-     * Retry file list fetch with short intervals when device is busy (recording).
-     * Microcontroller enters deep sleep after inactivity, so we retry frequently
-     * during the short window after recording ends, before deep sleep.
-     * Stops retrying if BLE disconnects (deep sleep entered).
+     * デバイスが録音中の場合、短いインターバルでファイルリスト取得をリトライする
+     * マイクロコントローラは非アクティブ後にディープスリープに入るため、
+     * 録音終了後の短いウィンドウで頻繁にリトライし、ディープスリープ前に試行する
+     * BLE切断時（ディープスリープに入った場合）はリトライを停止
      */
     private fun startFileListRetry() {
-        // Cancel any existing retry job
+        // 既存のリトライジョブをキャンセル
         fileListRetryJob?.cancel()
 
         fileListRetryJob = scope.launch {
             var retryCount = 0
-            val maxRetries = 6 // 30 seconds total (5s * 6)
-            val retryDelay = 5000L // 5 seconds
+            val maxRetries = TimeConstants.BLE_MAX_RETRIES // 合計30秒（5秒 * 6）
+            val retryDelay = TimeConstants.BLE_RETRY_DELAY_MS // 5秒
 
             while (retryCount < maxRetries) {
-                // Check if still connected (device may have entered deep sleep)
+                // まだ接続されているか確認（デバイスがディープスリープに入った可能性）
                 if (connectionStateFlow.value !is ConnectionState.Connected) {
-                    addLog("BLE disconnected during retry, stopping")
+                    addLog("リトライ中にBLE切断を検出、停止します")
                     break
                 }
 
                 delay(retryDelay)
                 retryCount++
-                addDebugLog("Retrying file list fetch ($retryCount/$maxRetries)")
+                addDebugLog("ファイルリスト取得をリトライ中 ($retryCount/$maxRetries)")
 
-                val success = bleDeviceCommandManager.fetchFileList(connectionStateFlow.value)
+                val success = bleDeviceManager.fetchFileList(connectionStateFlow.value)
                 if (success) {
-                    addLog("File list fetch succeeded on retry $retryCount")
+                    addLog("リトライ $retryCount 回目でファイルリストの取得に成功しました")
                     break
                 }
             }
 
             if (retryCount >= maxRetries && connectionStateFlow.value is ConnectionState.Connected) {
-                addLog("File list fetch failed after $maxRetries retries", LogLevel.ERROR)
+                addLog("$maxRetries 回のリトライ後にファイルリストの取得に失敗しました", LogLevel.ERROR)
             }
 
             fileListRetryJob = null
@@ -238,44 +265,44 @@ class BleOrchestrator(
 
     private fun performPostTransferSync() {
         scope.launch {
-            addDebugLog("Post-transfer sync...")
+            addDebugLog("転送後同期処理...")
 
-            // Re-fetch the file list to ensure the UI is up-to-date, but without triggering a new processing loop.
-            bleDeviceCommandManager.fetchFileList(connectionStateFlow.value, extension = "wav", triggerCallback = false)
+            // ファイルリストを再取得してUIを最新にする（新しい処理ループはトリガーしない）
+            bleDeviceManager.fetchFileList(connectionStateFlow.value, extension = "wav", triggerCallback = false)
 
-            // Step 2: Time Sync
-            val timeSyncSuccess = bleDeviceCommandManager.syncTime(connectionStateFlow.value)
+            // ステップ2: 時刻同期
+            val timeSyncSuccess = bleDeviceManager.syncTime(connectionStateFlow.value)
             if (!timeSyncSuccess) {
                 addLog("Time sync failed", LogLevel.ERROR)
                 return@launch
             }
 
-            // Step 3: Fetch Device Info
+            // ステップ3: デバイス情報取得
             val voltageRetryCount = appSettingsRepository.getFlow(Settings.VOLTAGE_RETRY_COUNT).first()
-            val deviceInfoSuccess = bleDeviceCommandManager.fetchDeviceInfo(connectionStateFlow.value, voltageRetryCount)
+            val deviceInfoSuccess = bleDeviceManager.fetchDeviceInfo(connectionStateFlow.value, voltageRetryCount)
             if (!deviceInfoSuccess) {
-                addLog("Device info fetch failed", LogLevel.ERROR)
+                addLog("デバイス情報の取得に失敗しました", LogLevel.ERROR)
                 return@launch
             }
 
-            // Step 4: Update location (since GET:info was successful)
-            addDebugLog("Updating location")
+            // ステップ4: 位置情報更新（GET:infoが成功したため）
+            addDebugLog("位置情報を更新中")
             locationMonitor.updateLocation()
         }
     }
 
     private fun checkForNewWavFilesAndProcess() {
         scope.launch {
-            // Use AtomicBoolean to prevent concurrent execution
-            // This avoids deadlock risk with bleMutex used by internal operations
+            // 並行実行を防ぐためAtomicBooleanを使用
+            // 内部操作で使用されるbleMutexとのデッドロックリスクを回避
             if (!isProcessingFiles.compareAndSet(false, true)) {
-                addDebugLog("Processing already in progress")
+                addDebugLog("ファイル処理が既に進行中です")
                 return@launch
             }
             try {
-                bleDeviceCommandManager.stopTimeSyncJob()
+                bleDeviceManager.stopTimeSyncJob()
 
-                val currentWavFilesOnMicrocontroller = bleDeviceCommandManager.fileList.value.filter { it.name.endsWith(".wav", ignoreCase = true) }
+                val currentWavFilesOnMicrocontroller = bleDeviceManager.fileList.value.filter { it.name.endsWith(".wav", ignoreCase = true) }
                 val transcribedFileNames = this@BleOrchestrator.transcriptionResults.value.map { it.fileName }.toSet()
 
                 // 未文字起こしファイル（ダウンロード対象）
@@ -290,35 +317,35 @@ class BleOrchestrator(
                 }
 
                 if (filesToDeleteOnly.isNotEmpty()) {
-                    addLog("Deleting ${filesToDeleteOnly.size} transcribed files from device")
+                    addLog("${filesToDeleteOnly.size} 件の文字起こし済みファイルをデバイスから削除中")
                     for (fileEntry in filesToDeleteOnly) {
-                        addDebugLog("Deleting: ${fileEntry.name}")
+                        addDebugLog("削除中: ${fileEntry.name}")
                         fileTransferManager.deleteFileAndUpdateList(fileEntry.name)
                     }
                 }
 
                 if (filesToDownload.isEmpty()) {
-                    addDebugLog("No new files to download")
+                    addDebugLog("新しいファイルはありません")
                     performPostTransferSync()
                     return@launch
                 }
 
-                addLog("Processing ${filesToDownload.size} new WAV files")
+                addLog("${filesToDownload.size} 件の新しいWAVファイルを処理中")
 
                 for (fileEntry in filesToDownload) {
-                    addDebugLog("Processing: ${fileEntry.name}")
+                    addDebugLog("処理中: ${fileEntry.name}")
 
                     val downloadSuccess = fileTransferManager.downloadFile(fileEntry.name)
 
                     if (downloadSuccess) {
-                        addDebugLog("Download OK, deleting from device")
+                        addDebugLog("ダウンロード成功、デバイスから削除中")
                         fileTransferManager.deleteFileAndUpdateList(fileEntry.name)
                     } else {
-                        addLog("Download failed: ${fileEntry.name}", LogLevel.ERROR)
+                        addLog("ダウンロード失敗: ${fileEntry.name}", LogLevel.ERROR)
                     }
                 }
 
-                addDebugLog("File processing complete")
+                addDebugLog("ファイル処理完了")
                 performPostTransferSync()
 
             } finally {
@@ -331,8 +358,11 @@ class BleOrchestrator(
         if (characteristic.uuid != UUID.fromString(BleRepository.RESPONSE_UUID_STRING)) return
 
         when (_currentOperation.value) {
-            BleOperation.FETCHING_FILE_LIST, BleOperation.FETCHING_DEVICE_INFO, BleOperation.SENDING_TIME, BleOperation.FETCHING_SETTINGS, BleOperation.SENDING_SETTINGS -> {
-                bleDeviceCommandManager.handleResponse(value, _currentOperation.value)
+            BleOperation.FETCHING_FILE_LIST, BleOperation.FETCHING_DEVICE_INFO, BleOperation.SENDING_TIME -> {
+                bleDeviceManager.handleResponse(value, _currentOperation.value)
+            }
+            BleOperation.FETCHING_SETTINGS, BleOperation.SENDING_SETTINGS -> {
+                bleSettingsManager.handleResponse(value, _currentOperation.value)
             }
             BleOperation.DOWNLOADING_FILE, BleOperation.DELETING_FILE -> {
                 fileTransferManager.handleCharacteristicChanged(characteristic, value)
@@ -354,20 +384,20 @@ class BleOrchestrator(
 
     fun fetchFileList(extension: String) {
         scope.launch {
-            bleDeviceCommandManager.fetchFileList(connectionStateFlow.value, extension)
+            bleDeviceManager.fetchFileList(connectionStateFlow.value, extension)
         }
     }
 
     suspend fun getSettings() {
-        bleDeviceCommandManager.getSettings(connectionStateFlow.value)
+        bleSettingsManager.getSettings(connectionStateFlow.value)
     }
 
     fun sendSettings() {
-        bleDeviceCommandManager.sendSettings(connectionStateFlow.value)
+        bleSettingsManager.sendSettings(connectionStateFlow.value)
     }
 
     fun updateSettings(updater: (com.pirorin215.fastrecmob.data.DeviceSettings) -> com.pirorin215.fastrecmob.data.DeviceSettings) {
-        bleDeviceCommandManager.updateSettings(updater)
+        bleSettingsManager.updateSettings(updater)
     }
 
     fun downloadFile(fileName: String) {
