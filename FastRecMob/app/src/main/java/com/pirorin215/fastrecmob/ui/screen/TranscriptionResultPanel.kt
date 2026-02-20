@@ -63,7 +63,6 @@ fun TranscriptionResultPanel(viewModel: MainViewModel, appSettingsViewModel: App
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val isSelectionMode = selectedFileNames.isNotEmpty()
-                    val showCompleted by appSettingsViewModel.showCompletedGoogleTasks.collectAsState()
                     val transcriptionCount by viewModel.transcriptionCount.collectAsState()
                     val audioFileCount by viewModel.audioFileCount.collectAsState()
 
@@ -74,17 +73,6 @@ fun TranscriptionResultPanel(viewModel: MainViewModel, appSettingsViewModel: App
                         modifier = Modifier.weight(1f) // Give it weight to push other elements
                     )
 
-                    Text(
-                        stringResource(R.string.show_synced_items),
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                    Switch(
-                        checked = showCompleted,
-                        onCheckedChange = { appSettingsViewModel.saveShowCompletedGoogleTasks(it) },
-                        modifier = Modifier.height(24.dp)
-                    )
-                    
                     IconButton(onClick = {
                         if (isSelectionMode) {
                             showDeleteSelectedConfirmDialog = true

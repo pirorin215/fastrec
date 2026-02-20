@@ -150,13 +150,6 @@ class AppSettingsViewModel(
             initialValue = 5 // Default to 5 minutes
         )
 
-    val showCompletedGoogleTasks: StateFlow<Boolean> = appSettingsRepository.getFlow(Settings.SHOW_COMPLETED_GOOGLE_TASKS)
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = false
-        )
-
     val autoStartOnBoot: StateFlow<Boolean> = appSettingsRepository.getFlow(Settings.AUTO_START_ON_BOOT)
         .stateIn(
             scope = viewModelScope,
@@ -316,12 +309,6 @@ class AppSettingsViewModel(
         viewModelScope.launch {
             val interval = minutes.coerceAtLeast(1) // Ensure at least 1 minute
             appSettingsRepository.setValue(Settings.GOOGLE_TASKS_SYNC_INTERVAL_MINUTES, interval)
-        }
-    }
-
-    fun saveShowCompletedGoogleTasks(show: Boolean) {
-        viewModelScope.launch {
-            appSettingsRepository.setValue(Settings.SHOW_COMPLETED_GOOGLE_TASKS, show)
         }
     }
 

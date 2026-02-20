@@ -19,7 +19,6 @@ import com.pirorin215.fastrecmob.service.BleScanService
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -71,14 +70,8 @@ class MainViewModel(
     val audioDirName: StateFlow<String> = appSettingsRepository.getFlow(Settings.AUDIO_DIR_NAME)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "FastRecRecordings")
 
-    val showCompletedGoogleTasks: StateFlow<Boolean> = appSettingsRepository.getFlow(Settings.SHOW_COMPLETED_GOOGLE_TASKS)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
     val transcriptionResults: StateFlow<List<TranscriptionResult>> = transcriptionResultRepository.transcriptionResultsFlow
         .map { list -> list.filter { !it.isDeletedLocally } }
-        .combine(showCompletedGoogleTasks) { list, showCompleted ->
-            if (showCompleted) list else list.filter { it.googleTaskId == null || it.transcriptionStatus == "FAILED" }
-        }
         .map { list -> list.sortedByDescending { com.pirorin215.fastrecmob.data.FileUtil.getTimestampFromFileName(it.fileName) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

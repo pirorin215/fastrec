@@ -7,7 +7,6 @@ import com.pirorin215.fastrecmob.data.FileEntry
 import com.pirorin215.fastrecmob.data.TranscriptionResult
 import com.pirorin215.fastrecmob.data.FileUtil
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -25,14 +24,8 @@ class TranscriptionViewModel(
     val transcriptionFontSize: StateFlow<Int> = appSettingsRepository.getFlow(com.pirorin215.fastrecmob.data.Settings.TRANSCRIPTION_FONT_SIZE)
         .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), 14)
 
-    val showCompletedGoogleTasks: StateFlow<Boolean> = appSettingsRepository.getFlow(com.pirorin215.fastrecmob.data.Settings.SHOW_COMPLETED_GOOGLE_TASKS)
-        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), false)
-
     val transcriptionResults: StateFlow<List<TranscriptionResult>> = transcriptionResultRepository.transcriptionResultsFlow
         .map { list -> list.filter { !it.isDeletedLocally } }
-        .combine(showCompletedGoogleTasks) { list, showCompleted ->
-            if (showCompleted) list else list.filter { it.googleTaskId == null || it.transcriptionStatus == "FAILED" }
-        }
         .map { list -> list.sortedByDescending { FileUtil.getTimestampFromFileName(it.fileName) } }
         .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
 
