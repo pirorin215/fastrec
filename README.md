@@ -101,7 +101,8 @@ Arduino IDE 2.xを使用する場合:
      - サイドバーが表示されない場合は「View」→「Toggle Sidebar」で表示をオンにしてください
    - またはメニューから「Tools」→「Board」→「Boards Manager...」を選択
    - 検索欄に「esp32」と入力
-   - 「esp32 by Espressif Systems」をインストール
+   - 「esp32 by Espressif Systems」を**バージョン3.3.4**でインストール
+     - **重要**: バージョン3.3.7はNimBLEと互換性がなく、コアダンプが発生します
 
 4. **必要なライブラリをインストール**（初回のみ）
    - 左側のサイドバーにあるライブラリマネージャアイコン（📚のような本のアイコン）をクリック
@@ -111,6 +112,7 @@ Arduino IDE 2.xを使用する場合:
      - `ArduinoJson` by Benoit Blanchon（JSON処理）
      - `72x40oled_lib`（OLED表示）
    - 詳細は [EXTERNAL_LIBRARIES.md](fastrec_alt/EXTERNAL_LIBRARIES.md) を参照
+     - **ESP32コアバージョンに関する重要な注意事項があります**
 
 5. **スケッチを開く**
    - 「File」→「Open」
