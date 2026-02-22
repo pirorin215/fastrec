@@ -35,10 +35,10 @@ FastRecデバイス用のESP32-S3ファームウェア。BLE通信、オーデ�
 | ライブラリ | バージョン | 用途 |
 |-----------|----------|------|
 | NimBLE-Arduino | 2.3.6 | BLE通信 |
-| LittleFS | 3.3.4 | ファイルシステム |
 | ArduinoJson | 7.4.2 | JSON処理 |
 | 72x40oled_lib | 1.0.1 | OLED表示 |
-| Wire | 3.3.4 | I2C通信 |
+
+※ LittleFS、Wire等はESP32コア(3.3.4)に含まれています
 
 ## ヘルパースクリプト
 
