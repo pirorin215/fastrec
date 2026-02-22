@@ -26,7 +26,8 @@ const AppState validTransitions[][2] = {
     {IDLE, DSLEEP},
     {SETUP, DSLEEP},
     {IDLE, SERVICE},
-    {SERVICE, IDLE}
+    {SERVICE, IDLE},
+    {IDLE, SETUP},
 };
 const size_t NUM_VALID_TRANSITIONS = sizeof(validTransitions) / sizeof(validTransitions[0]);
 
@@ -607,14 +608,11 @@ void setup() {
   if (!loadSettingsFromLittleFS()) {
     setAppState(SETUP, false);
     g_lastActivityTime = millis();  // Reset activity timer after setup or deletion
-    return;
   }
 
   if (!initI2SMicrophone()) {
     applog("ERROR: I2S initialization failed. Entering SETUP state.");
     updateDisplay("I2S ERROR");
-    setAppState(SETUP, false);
-    g_lastActivityTime = millis();
     return;
   }
 

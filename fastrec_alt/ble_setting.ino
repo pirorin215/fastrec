@@ -517,7 +517,8 @@ class MyCallbacks : public NimBLECharacteristicCallbacks {
       g_lastBleCommand = value; // Store the last received command
       g_lastActivityTime = millis();  // コマンド受信もアクティビティ
 
-      if (g_currentAppState != IDLE) {
+      // SETUP状態でも設定関係のコマンドは許可する
+      if (g_currentAppState != IDLE && g_currentAppState != SETUP) {
         std::string busyMessage = "ERROR: Device is busy (State: " + std::string(appStateStrings[g_currentAppState]) + "). Command rejected.";
         pResponseCharacteristic->setValue(busyMessage.c_str());
         pResponseCharacteristic->notify();
