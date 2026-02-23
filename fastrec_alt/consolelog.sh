@@ -1,7 +1,19 @@
-#!/bin/sh
+#!/bin/bash
+
+# 共通関数と設定ファイルを読み込み
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/common.sh" ]; then
+    source "$SCRIPT_DIR/common.sh"
+fi
+if [ -f "$SCRIPT_DIR/setting.sh" ]; then
+    source "$SCRIPT_DIR/setting.sh"
+fi
+
+# ESPポートチェック
+check_esp_port
 
 CAT_ACTIVE=false
-DEVICE_PATTERN="/dev/cu.usbmodem* /dev/tty.usbmodem*"
+DEVICE_PATTERN="$ESP_PORT"
 
 while true; do
   DEVICE_PRESENT=false
