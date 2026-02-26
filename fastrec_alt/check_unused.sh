@@ -1,16 +1,14 @@
 #!/bin/bash
 
+# 共通関数を読み込み
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/common.sh" ]; then
+    source "$SCRIPT_DIR/common.sh"
+fi
+
 # ctagsとcscopeがインストールされているか確認
-if ! command -v ctags &> /dev/null;
-then
-    echo "エラー: ctagsがインストールされていません。'brew install ctags'などでインストールしてください。"
-    exit 1
-fi
-if ! command -v cscope &> /dev/null;
-then
-    echo "エラー: cscopeがインストールされていません。'brew install cscope'などでインストールしてください。"
-    exit 1
-fi
+check_command "ctags" "'brew install ctags'などでインストールしてください。"
+check_command "cscope" "'brew install cscope'などでインストールしてください。"
 
 # --- メイン処理 ---
 # 解析対象のソースファイル一覧を取得

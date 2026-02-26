@@ -15,7 +15,6 @@ const int FONT_SIZE = 5;
 const int LINE_HEIGHT = 10;  // Assuming 10 pixels per line for font size 5
 const int MAX_BLE_CMD_DISPLAY_LEN = 7;
 
-
 // Draw a single digit or colon using custom font (FONT_WIDTH x FONT_HEIGHT pixels)
 void drawCustomChar(uint8_t x, uint8_t y, uint8_t charIndex) {
   if (charIndex > 17) return;  // Font has 18 characters (0-9, :, and 7 weekday symbols)

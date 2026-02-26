@@ -606,8 +606,7 @@ void setup() {
   initSSD();
     
   if (!loadSettingsFromLittleFS()) {
-    setAppState(SETUP, false);
-    g_lastActivityTime = millis();  // Reset activity timer after setup or deletion
+    setAppState(SETUP, false);  // setAppState() 内で g_lastActivityTime がリセットされる
   }
 
   if (!initI2SMicrophone()) {

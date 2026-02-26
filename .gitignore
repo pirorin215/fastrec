@@ -73,3 +73,6 @@ secrets/
 
 # 設定ファイル（テンプレートは除外しない）
 fastrec_alt/setting.sh
+
+# コード検索インデックス
+.cocoindex_code/

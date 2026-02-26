@@ -188,10 +188,6 @@ std::string g_file_to_transfer_name;
 int g_chunk_burst_size = 8;
 std::string g_lastBleCommand;
 
-// service mode
-extern int g_serviceDisplayMode;
-extern const int NUM_SERVICE_MODES;
-
 // Function Prototypes ---
 
 #endif // FASTREC_INO_H
