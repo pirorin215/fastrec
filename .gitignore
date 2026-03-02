@@ -57,6 +57,9 @@ Thumbs.db
 .vscode/
 .sublime-*
 
+# Claude Code
+.claude/
+
 # Temporary files
 *.tmp
 *.temp
