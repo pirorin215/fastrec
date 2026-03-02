@@ -71,17 +71,12 @@ class TranscriptionResultRepository(private val context: Context) {
         val TRANSCRIPTION_RESULTS = stringPreferencesKey("transcription_results_list")
     }
 
-    private val json = Json {
-        prettyPrint = false // JSONを整形しない (保存容量のため)
-        ignoreUnknownKeys = true // JSONが将来的に変更されても互換性を保つ
-    }
-
     // 文字起こし結果のリストを監視するためのFlow
     val transcriptionResultsFlow: Flow<List<TranscriptionResult>> = context.transcriptionDataStore.data
         .map { preferences ->
             val jsonString = preferences[PreferencesKeys.TRANSCRIPTION_RESULTS] ?: "[]"
             try {
-                val results = json.decodeFromString<List<TranscriptionResult>>(jsonString)
+                val results = JsonUtil.json.decodeFromString<List<TranscriptionResult>>(jsonString)
                 // Fix for legacy data without displayOrder.
                 if (results.any { it.displayOrder == 0 } && results.distinctBy { it.displayOrder }.size == 1) {
                     results.sortedByDescending { it.lastEditedTimestamp }.mapIndexed { index, result -> result.copy(displayOrder = index) }
@@ -96,34 +91,33 @@ class TranscriptionResultRepository(private val context: Context) {
 
     // 文字起こし結果を追加または更新するsuspend関数
     suspend fun addResult(result: TranscriptionResult) {
-        context.transcriptionDataStore.edit { preferences ->
-            val currentList = transcriptionResultsFlow.first()
+        android.util.Log.d("TranscriptionResultRepository", "addResult called: fileName=${result.fileName}, isDeletedLocally=${result.isDeletedLocally}")
+        updateListInDataStore(context.transcriptionDataStore, PreferencesKeys.TRANSCRIPTION_RESULTS) { currentList: MutableList<TranscriptionResult> ->
+            android.util.Log.d("TranscriptionResultRepository", "Current list size before update: ${currentList.size}")
             val existingResult = currentList.find { it.fileName == result.fileName }
 
-            val updatedList = if (existingResult != null) {
+            if (existingResult != null) {
                 // 既存のアイテムを更新 (displayOrderは維持、lastEditedTimestampは渡されたresultのものを使用)
-                currentList.map {
-                    if (it.fileName == result.fileName) {
-                        result.copy(displayOrder = existingResult.displayOrder)
-                    } else {
-                        it
-                    }
-                }
+                val index = currentList.indexOf(existingResult)
+                currentList[index] = result.copy(displayOrder = existingResult.displayOrder)
+                android.util.Log.d("TranscriptionResultRepository", "Updated existing item at index $index: isDeletedLocally=${result.isDeletedLocally}")
             } else {
                 // 新しいアイテムを先頭に追加するため、既存アイテムのdisplayOrderをインクリメント
-                val shiftedList = currentList.map { it.copy(displayOrder = it.displayOrder + 1) }
-                // 新しいアイテムをdisplayOrder = 0として追加
-                shiftedList + result.copy(displayOrder = 0)
+                currentList.forEachIndexed { i, _ ->
+                    currentList[i] = currentList[i].copy(displayOrder = currentList[i].displayOrder + 1)
+                }
+                // 新しいアイテムをdisplayOrder = 0として先頭に追加
+                currentList.add(0, result.copy(displayOrder = 0))
+                android.util.Log.d("TranscriptionResultRepository", "Added new item at index 0: isDeletedLocally=${result.isDeletedLocally}")
             }
-            preferences[PreferencesKeys.TRANSCRIPTION_RESULTS] = json.encodeToString(updatedList)
+            android.util.Log.d("TranscriptionResultRepository", "List size after update: ${currentList.size}")
         }
+        android.util.Log.d("TranscriptionResultRepository", "addResult complete: fileName=${result.fileName}")
     }
 
     // 新しいリスト全体を保存するsuspend関数
     suspend fun updateResults(results: List<TranscriptionResult>) {
-        context.transcriptionDataStore.edit { preferences ->
-            preferences[PreferencesKeys.TRANSCRIPTION_RESULTS] = json.encodeToString(results)
-        }
+        replaceListInDataStore(context.transcriptionDataStore, PreferencesKeys.TRANSCRIPTION_RESULTS, results)
     }
 
     // 全ての文字起こし結果をクリアするsuspend関数
@@ -135,14 +129,14 @@ class TranscriptionResultRepository(private val context: Context) {
 
     // 特定の文字起こし結果を永久に削除するsuspend関数
     suspend fun permanentlyRemoveResult(result: TranscriptionResult) {
-        context.transcriptionDataStore.edit { preferences ->
-            val currentList = transcriptionResultsFlow.first()
+        updateListInDataStore(context.transcriptionDataStore, PreferencesKeys.TRANSCRIPTION_RESULTS) { currentList: MutableList<TranscriptionResult> ->
             val listAfterRemoval = currentList.filter { it.fileName != result.fileName }
             // displayOrderを再インデックスする
             val updatedList = listAfterRemoval.sortedBy { it.displayOrder }.mapIndexed { index, item ->
                 item.copy(displayOrder = index)
             }
-            preferences[PreferencesKeys.TRANSCRIPTION_RESULTS] = json.encodeToString(updatedList)
+            currentList.clear()
+            currentList.addAll(updatedList)
         }
     }
 
@@ -150,6 +144,8 @@ class TranscriptionResultRepository(private val context: Context) {
     suspend fun removeResult(result: TranscriptionResult) {
         // 論理削除フラグを設定して結果を更新
         val softDeletedResult = result.copy(isDeletedLocally = true)
+        android.util.Log.d("TranscriptionResultRepository", "Soft deleting: ${result.fileName}, isDeletedLocally: ${softDeletedResult.isDeletedLocally}")
         addResult(softDeletedResult)
+        android.util.Log.d("TranscriptionResultRepository", "Soft delete complete: ${result.fileName}")
     }
 }

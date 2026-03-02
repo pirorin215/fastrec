@@ -158,7 +158,7 @@ class BleSettingsManager(
                         val settingsString = responseBuffer.toString().trim()
                         logManager.addLog("受信したリモート設定 (GET:setting_ini): $settingsString")
 
-                        if (settingsString.startsWith("ERROR:")) {
+                        if (settingsString.startsWith(BleConstants.RESPONSE_ERROR + BleConstants.COMMAND_SEPARATOR)) {
                             logManager.addLog("GET:setting_ini エラー応答: $settingsString")
                             currentSettingsCommandCompletion?.complete(Pair(false, settingsString))
                         } else {

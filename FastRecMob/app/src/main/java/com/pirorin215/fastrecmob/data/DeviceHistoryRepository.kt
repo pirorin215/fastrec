@@ -22,8 +22,6 @@ class DeviceHistoryRepository(private val context: Context) {
         val DEVICE_HISTORY_LIST = stringPreferencesKey("device_history_list")
     }
 
-    private val json = Json { ignoreUnknownKeys = true }
-
     companion object {
         // Constants moved to TimeConstants.kt and LocationConstants.kt
     }
@@ -32,7 +30,7 @@ class DeviceHistoryRepository(private val context: Context) {
         .map { preferences ->
             val jsonString = preferences[PreferencesKeys.DEVICE_HISTORY_LIST] ?: "[]"
             try {
-                json.decodeFromString<List<DeviceHistoryEntry>>(jsonString)
+                JsonUtil.json.decodeFromString<List<DeviceHistoryEntry>>(jsonString)
             } catch (e: Exception) {
                 // Log the error or handle it appropriately, return empty list to prevent crash
                 e.printStackTrace()
@@ -41,18 +39,10 @@ class DeviceHistoryRepository(private val context: Context) {
         }
 
     suspend fun addEntry(entry: DeviceHistoryEntry) {
-        context.deviceHistoryDataStore.edit { preferences ->
-            val jsonString = preferences[PreferencesKeys.DEVICE_HISTORY_LIST] ?: "[]"
-            val currentList = try {
-                json.decodeFromString<MutableList<DeviceHistoryEntry>>(jsonString)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                mutableListOf()
-            }
-
+        updateListInDataStore(context.deviceHistoryDataStore, PreferencesKeys.DEVICE_HISTORY_LIST) { currentList ->
             // Check if currentList is not empty for filtering
             if (currentList.isNotEmpty()) {
-                val lastEntry = currentList.first()
+                val lastEntry: DeviceHistoryEntry = currentList.first()
 
                 val timeDiff = entry.timestamp - lastEntry.timestamp
 
@@ -62,9 +52,9 @@ class DeviceHistoryRepository(private val context: Context) {
                 val lastLon = lastEntry.longitude
 
                 val locationIsSimilar = if (newLat != null && newLon != null && lastLat != null && lastLon != null) {
-                    val latDiff = newLat - lastLat
-                    val lonDiff = newLon - lastLon
-                    val distanceSquared = latDiff * latDiff + lonDiff * lonDiff
+                    val latDiff: Double = newLat - lastLat
+                    val lonDiff: Double = newLon - lastLon
+                    val distanceSquared: Double = latDiff * latDiff + lonDiff * lonDiff
                     distanceSquared < LocationConstants.LOCATION_THRESHOLD_SQUARED
                 } else {
                     false // If location data is incomplete, assume not similar enough to block
@@ -72,12 +62,12 @@ class DeviceHistoryRepository(private val context: Context) {
 
                 // Only prevent adding if BOTH time is within threshold AND location is similar
                 if (timeDiff < TimeConstants.DEVICE_HISTORY_TIME_THRESHOLD_MS && locationIsSimilar) {
-                    return@edit // Don't add if within 30 minutes AND location is too similar
+                    return@updateListInDataStore // Don't add if within 30 minutes AND location is too similar
                 }
             }
 
-            currentList.add(0, entry) // Add new entry to the beginning of the list
-            preferences[PreferencesKeys.DEVICE_HISTORY_LIST] = json.encodeToString(currentList)
+            // Add new entry to the beginning of the list
+            currentList.add(0, entry)
         }
     }
 
@@ -88,21 +78,12 @@ class DeviceHistoryRepository(private val context: Context) {
     }
 
     suspend fun deleteEntriesByTimestamps(timestamps: List<Long>) {
-        context.deviceHistoryDataStore.edit { preferences ->
-            val jsonString = preferences[PreferencesKeys.DEVICE_HISTORY_LIST] ?: "[]"
-            val currentList = try {
-                json.decodeFromString<MutableList<DeviceHistoryEntry>>(jsonString)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                mutableListOf()
-            }
-
-            // 指定されたタイムスタンプのエントリを削除
-            val filteredList = currentList.filterNot { entry ->
+        updateListInDataStore(context.deviceHistoryDataStore, PreferencesKeys.DEVICE_HISTORY_LIST) { currentList ->
+            val filteredList = currentList.filterNot { entry: DeviceHistoryEntry ->
                 timestamps.contains(entry.timestamp)
-            }
-
-            preferences[PreferencesKeys.DEVICE_HISTORY_LIST] = json.encodeToString(filteredList)
+            }.toMutableList()
+            currentList.clear()
+            currentList.addAll(filteredList)
         }
     }
 
@@ -111,26 +92,14 @@ class DeviceHistoryRepository(private val context: Context) {
      * @param retentionPeriodMs 保持期間（ミリ秒）
      */
     suspend fun deleteOldEntries(retentionPeriodMs: Long) {
-        context.deviceHistoryDataStore.edit { preferences ->
-            val jsonString = preferences[PreferencesKeys.DEVICE_HISTORY_LIST] ?: "[]"
-            val currentList = try {
-                json.decodeFromString<MutableList<DeviceHistoryEntry>>(jsonString)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                mutableListOf()
+        updateListInDataStore(context.deviceHistoryDataStore, PreferencesKeys.DEVICE_HISTORY_LIST) { currentList ->
+            val filteredList: List<DeviceHistoryEntry> = currentList.filterByTimestamp(
+                retentionPeriodMs
+            ) { entry: DeviceHistoryEntry ->
+                entry.timestamp
             }
-
-            val cutoffTime = System.currentTimeMillis() - retentionPeriodMs
-            
-            // 保持期間内のデータのみを残す
-            val filteredList = currentList.filter { entry ->
-                entry.timestamp >= cutoffTime
-            }
-
-            // 変更がある場合のみ保存
-            if (filteredList.size < currentList.size) {
-                preferences[PreferencesKeys.DEVICE_HISTORY_LIST] = json.encodeToString(filteredList)
-            }
+            currentList.clear()
+            currentList.addAll(filteredList)
         }
     }
 }

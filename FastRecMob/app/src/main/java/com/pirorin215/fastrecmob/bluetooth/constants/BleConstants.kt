@@ -104,4 +104,45 @@ object BleConstants {
      * エラーレスポンスプレフィックス
      */
     const val RESPONSE_ERROR = "ERROR"
+
+    /**
+     * 時刻同期成功レスポンスプレフィックス
+     */
+    const val RESPONSE_OK_TIME = "OK: Time"
+
+    // --- プロトコルフォーマット定数 ---
+    /**
+     * JSON開始マーカー
+     */
+    const val JSON_START_MARKER = "{"
+
+    /**
+     * JSON終了マーカー
+     */
+    const val JSON_END_MARKER = "}"
+
+    /**
+     * 配列開始マーカー
+     */
+    const val ARRAY_START_MARKER = "["
+
+    /**
+     * 配列終了マーカー
+     */
+    const val ARRAY_END_MARKER = "]"
+
+    /**
+     * 空配列表現
+     */
+    const val EMPTY_ARRAY = "[]"
+
+    /**
+     * コマンドセパレータ
+     */
+    const val COMMAND_SEPARATOR = ":"
+
+    /**
+     * レスポンスセパレータ（スペース）
+     */
+    const val RESPONSE_SEPARATOR = ": "
 }

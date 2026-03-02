@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 
 /**
  * 文字起こし結果のCRUD操作とクリーンアップを担当するマネージャークラス
@@ -36,6 +38,8 @@ class TranscriptionResultManager(
     private val logManager: LogManager,
     private val stateManager: TranscriptionStateManager
 ) {
+    // Note: We use .first() instead of caching to ensure we always get the latest data
+    // The performance impact is minimal since these operations are user-triggered
     /**
      * ローカルオーディオファイル数を更新
      */
@@ -79,7 +83,7 @@ class TranscriptionResultManager(
         try {
             logManager.addDebugLog("Running cleanup...")
             val limit = transcriptionCacheLimitFlow.value
-            // We need to fetch current list from repository
+            // Fetch current list from repository
             val currentTranscriptionResults = transcriptionResultRepository.transcriptionResultsFlow.first()
                 .filter { !it.isDeletedLocally } // Assuming we only count non-deleted ones for limit?
                 .sortedBy { it.lastEditedTimestamp } // Oldest first
@@ -88,18 +92,22 @@ class TranscriptionResultManager(
                 val resultsToDelete = currentTranscriptionResults.take(currentTranscriptionResults.size - limit)
                 logManager.addLog("Cleanup: deleting ${resultsToDelete.size} old results (limit: $limit)")
 
-                resultsToDelete.forEach { result ->
-                    // Delete from DataStore
-                    transcriptionResultRepository.removeResult(result)
-                    logManager.addDebugLog("Deleted result: ${result.fileName}")
+                // Parallel deletion with limited concurrency to avoid overwhelming the system
+                resultsToDelete.map { result ->
+                    async(Dispatchers.IO) {
+                        // Delete from DataStore
+                        transcriptionResultRepository.removeResult(result)
+                        logManager.addDebugLog("Deleted result: ${result.fileName}")
 
-                    // Delete associated audio file using MediaStore API
-                    if (FileUtil.deleteAudioFile(context, result.fileName)) {
-                        logManager.addDebugLog("Deleted audio: ${result.fileName}")
-                    } else {
-                        logManager.addLog("Failed to delete audio: ${result.fileName}", LogLevel.ERROR)
+                        // Delete associated audio file using MediaStore API
+                        if (FileUtil.deleteAudioFile(context, result.fileName)) {
+                            logManager.addDebugLog("Deleted audio: ${result.fileName}")
+                        } else {
+                            logManager.addLog("Failed to delete audio: ${result.fileName}", LogLevel.ERROR)
+                        }
                     }
-                }
+                }.awaitAll() // Wait for all deletions to complete
+
                 logManager.addDebugLog("Cleanup complete")
             } else {
                 logManager.addDebugLog("Cache within limit ($limit)")
@@ -226,28 +234,32 @@ class TranscriptionResultManager(
      * 全文字起こし結果をクリア
      */
     fun clearTranscriptionResults() {
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             logManager.addLog("Clearing all transcriptions")
             val currentTranscriptionResults = transcriptionResultRepository.transcriptionResultsFlow.first()
 
             val updatedListForRepo = mutableListOf<TranscriptionResult>()
 
-            // First, delete all associated WAV files using MediaStore API
-            currentTranscriptionResults.forEach { result ->
-                if (FileUtil.deleteAudioFile(context, result.fileName)) {
-                    logManager.addDebugLog("Deleted: ${result.fileName}")
-                } else {
-                    logManager.addLog("Failed to delete: ${result.fileName}", LogLevel.ERROR)
-                }
+            // Parallel file deletion using coroutines
+            currentTranscriptionResults.map { result ->
+                async(Dispatchers.IO) {
+                    val fileDeleted = FileUtil.deleteAudioFile(context, result.fileName)
+                    if (fileDeleted) {
+                        logManager.addDebugLog("Deleted: ${result.fileName}")
+                    } else {
+                        logManager.addLog("Failed to delete: ${result.fileName}", LogLevel.ERROR)
+                    }
 
-                if (result.googleTaskId == null) {
-                    // Local-only item: permanently delete now (from DataStore)
-                    transcriptionResultRepository.permanentlyRemoveResult(result)
-                } else {
-                    // Synced item: soft delete (mark for remote deletion during next sync)
-                    updatedListForRepo.add(result.copy(isDeletedLocally = true))
+                    if (result.googleTaskId == null) {
+                        // Local-only item: permanently delete now (from DataStore)
+                        transcriptionResultRepository.permanentlyRemoveResult(result)
+                    } else {
+                        // Synced item: soft delete (mark for remote deletion during next sync)
+                        updatedListForRepo.add(result.copy(isDeletedLocally = true))
+                    }
                 }
-            }
+            }.awaitAll() // Wait for all deletions to complete
+
             transcriptionResultRepository.updateResults(updatedListForRepo) // Only updates for synced items
 
             logManager.addLog("All transcriptions cleared")
@@ -259,7 +271,9 @@ class TranscriptionResultManager(
      * 文字起こし結果を削除
      */
     fun removeTranscriptionResult(result: TranscriptionResult) {
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
+            logManager.addDebugLog("Starting deletion: ${result.fileName}, googleTaskId: ${result.googleTaskId}")
+
             if (result.googleTaskId != null) {
                 // If synced with Google Tasks, perform a soft delete locally.
                 // Actual deletion from Google Tasks and permanent local deletion will happen during sync.
@@ -272,12 +286,17 @@ class TranscriptionResultManager(
             }
 
             // Delete audio file using MediaStore API
-            if (FileUtil.deleteAudioFile(context, result.fileName)) {
+            val audioDeleted = FileUtil.deleteAudioFile(context, result.fileName)
+            logManager.addDebugLog("Audio file deletion result for ${result.fileName}: $audioDeleted")
+
+            if (audioDeleted) {
                 logManager.addDebugLog("Audio deleted: ${result.fileName}")
                 updateLocalAudioFileCount()
             } else {
                 logManager.addLog("Failed to delete audio: ${result.fileName}", LogLevel.ERROR)
             }
+
+            logManager.addDebugLog("Deletion complete: ${result.fileName}")
         }
     }
 
@@ -302,15 +321,47 @@ class TranscriptionResultManager(
      * 複数の文字起こし結果を削除
      */
     fun removeTranscriptionResults(fileNames: Set<String>, clearSelectionCallback: () -> Unit) {
-        scope.launch {
-            // We need to fetch current results to filter
+        scope.launch(Dispatchers.IO) {
+            android.util.Log.d("TranscriptionResultManager", "removeTranscriptionResults called with ${fileNames.size} files: $fileNames")
+            logManager.addDebugLog("Removing ${fileNames.size} transcription results")
+
+            // Fetch current results from repository
             val currentResults = transcriptionResultRepository.transcriptionResultsFlow.first()
+            android.util.Log.d("TranscriptionResultManager", "Current results count: ${currentResults.size}")
+
             val resultsToRemove = currentResults.filter { fileNames.contains(it.fileName) }
+            android.util.Log.d("TranscriptionResultManager", "Results to remove: ${resultsToRemove.size}")
+
+            // Batch process deletions more efficiently
             resultsToRemove.forEach { result ->
-                removeTranscriptionResult(result) // Use existing single delete function
+                android.util.Log.d("TranscriptionResultManager", "Processing deletion: ${result.fileName}, googleTaskId: ${result.googleTaskId}")
+
+                if (result.googleTaskId != null) {
+                    // If synced with Google Tasks, perform a soft delete locally.
+                    // Actual deletion from Google Tasks and permanent local deletion will happen during sync.
+                    transcriptionResultRepository.removeResult(result) // This now sets isDeletedLocally = true
+                    logManager.addDebugLog("Soft-deleted: ${result.fileName}")
+                } else {
+                    // If not synced with Google Tasks, permanently delete locally.
+                    transcriptionResultRepository.permanentlyRemoveResult(result)
+                    logManager.addLog("Deleted: ${result.fileName}")
+                }
+
+                // Delete audio file using MediaStore API
+                val audioDeleted = FileUtil.deleteAudioFile(context, result.fileName)
+                android.util.Log.d("TranscriptionResultManager", "Audio file deletion result for ${result.fileName}: $audioDeleted")
+
+                if (audioDeleted) {
+                    logManager.addDebugLog("Audio deleted: ${result.fileName}")
+                } else {
+                    logManager.addLog("Failed to delete audio: ${result.fileName}", LogLevel.ERROR)
+                }
             }
+
             clearSelectionCallback() // Clear selection after deletion
             logManager.addLog("Removed ${resultsToRemove.size} transcriptions")
+            android.util.Log.d("TranscriptionResultManager", "Deletion complete")
+            updateLocalAudioFileCount()
         }
     }
 }

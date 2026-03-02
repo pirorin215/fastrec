@@ -13,6 +13,7 @@ import com.pirorin215.fastrecmob.LocationTracker
 import com.pirorin215.fastrecmob.constants.BleTimeoutConstants
 import com.pirorin215.fastrecmob.constants.TimeConstants
 import com.pirorin215.fastrecmob.data.parseFileEntries
+import com.pirorin215.fastrecmob.data.toUtf8String
 import com.pirorin215.fastrecmob.viewModel.BleOperation
 import com.pirorin215.fastrecmob.viewModel.LogManager
 import com.pirorin215.fastrecmob.viewModel.NavigationEvent
@@ -345,9 +346,9 @@ class BleDeviceManager(
         when (operation) {
             BleOperation.FETCHING_DEVICE_INFO -> {
                 // 終了判定のために文字列化してチェック（簡易的なチェック）
-                val currentBufferAsString = rawResponseBuffer.toString("UTF-8").trim()
+                val currentBufferAsString = rawResponseBuffer.toUtf8String()
 
-                if (currentBufferAsString.isNotEmpty() && currentBufferAsString.endsWith("}")) {
+                if (currentBufferAsString.isNotEmpty() && currentBufferAsString.endsWith(BleConstants.JSON_END_MARKER)) {
                     logManager.addLog("生のDeviceInfo JSON: $currentBufferAsString")
                     try {
                         val parsedResponse = json.decodeFromString<DeviceInfoResponse>(currentBufferAsString)
@@ -357,22 +358,22 @@ class BleDeviceManager(
                         logManager.addLog("DeviceInfo解析エラー: ${e.message}")
                         currentCommandCompletion?.complete(Pair(false, e.message))
                     }
-                } else if (currentBufferAsString.startsWith("ERROR:")) {
+                } else if (currentBufferAsString.startsWith(BleConstants.RESPONSE_ERROR + BleConstants.COMMAND_SEPARATOR)) {
                     logManager.addLog("GET:info エラー応答: $currentBufferAsString")
                     currentCommandCompletion?.complete(Pair(false, currentBufferAsString))
                 }
             }
             BleOperation.FETCHING_FILE_LIST -> {
-                val currentBufferAsString = rawResponseBuffer.toString("UTF-8").trim()
+                val currentBufferAsString = rawResponseBuffer.toUtf8String()
 
                 // 空の配列チェック
-                if (currentBufferAsString == "[]") {
+                if (currentBufferAsString == BleConstants.EMPTY_ARRAY) {
                     _fileList.value = emptyList()
                     currentCommandCompletion?.complete(Pair(true, null))
                     return
                 }
 
-                if (currentBufferAsString.endsWith("]")) {
+                if (currentBufferAsString.endsWith(BleConstants.ARRAY_END_MARKER)) {
                     try {
                         _fileList.value = parseFileEntries(currentBufferAsString)
                         logManager.addLog("FileList解析完了. 件数: ${_fileList.value.size}")
@@ -381,18 +382,18 @@ class BleDeviceManager(
                         logManager.addLog("FileList解析エラー: ${e.message}")
                         currentCommandCompletion?.complete(Pair(false, e.message))
                     }
-                } else if (currentBufferAsString.startsWith("ERROR:")) {
+                } else if (currentBufferAsString.startsWith(BleConstants.RESPONSE_ERROR + BleConstants.COMMAND_SEPARATOR)) {
                     logManager.addLog("GET:ls エラー応答: $currentBufferAsString")
                     _fileList.value = emptyList()
                     currentCommandCompletion?.complete(Pair(false, currentBufferAsString))
                 }
             }
             BleOperation.SENDING_TIME -> {
-                val response = rawResponseBuffer.toString("UTF-8").trim()
-                if (response.startsWith("OK: Time")) {
+                val response = rawResponseBuffer.toUtf8String()
+                if (response.startsWith(BleConstants.RESPONSE_OK_TIME)) {
                     currentCommandCompletion?.complete(Pair(true, null))
                     rawResponseBuffer.reset()
-                } else if (response.startsWith("ERROR:")) {
+                } else if (response.startsWith(BleConstants.RESPONSE_ERROR + BleConstants.COMMAND_SEPARATOR)) {
                     currentCommandCompletion?.complete(Pair(false, response))
                     rawResponseBuffer.reset()
                 } else {
