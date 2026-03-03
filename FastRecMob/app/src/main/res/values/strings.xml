@@ -3,7 +3,8 @@
     <string name="device_history_title">@string/menu_device_history</string>
     <string name="main_screen_title">FastRec</string>
     <string name="no_data_message">no data</string>
-    <string name="google_api_key_label">Google Cloud API Key</string>
+    <string name="google_api_key_label">Cloud Speech-to-Text API Key</string>
+    <string name="gemini_api_key_label">Gemini API Key</string>
     <string name="ble_burst_size_label">BLE Chunk Burst Size</string>
     <string name="google_todo_list_name_label">Google ToDo List Name</string>
     <string name="close_button_text">Close</string>

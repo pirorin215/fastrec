@@ -1,6 +1,6 @@
 [versions]
 vico = "1.14.0"
-agp = "8.7.0"
+agp = "8.8.0"
 kotlin = "2.0.0"
 kotlinxSerialization = "1.6.0" # Added kotlinxSerialization version
 coreKtx = "1.16.0"

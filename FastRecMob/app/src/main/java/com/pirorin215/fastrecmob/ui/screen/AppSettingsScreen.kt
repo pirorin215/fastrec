@@ -146,35 +146,23 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
     }
 
     val saveSettings: () -> Unit = {
-        // GCPモードでGemini APIキーがある場合のみモデル検証
+        // まず全設定を保存（APIキーもここで保存される）
+        saveAllSettings()
+
+        // GCPモードでGemini APIキーがある場合のみモデル検証（警告用）
         if (selectedProviderMode == ProviderMode.GCP && geminiApiKeyText.isNotBlank()) {
             showSavingDialog = true
             coroutineScope.launch {
                 val result = appSettingsViewModel.verifyGeminiModel(selectedGeminiModel.modelName)
                 showSavingDialog = false
 
-                if (result.isSuccess) {
-                    // モデルが有効な場合は保存
-                    saveAllSettings()
-                } else {
-                    // モデルが無効な場合はエラーダイアログを表示
-                    // Resultからエラーメッセージを生成
-                    val error = result.exceptionOrNull()
+                if (result.isFailure) {
+                    // 保存済みだが、モデル検証に失敗した場合は警告を表示
                     val modelName = selectedGeminiModel.modelName
-                    errorMessage = when {
-                        error?.message?.contains("NOT_FOUND") == true ||
-                        error?.message?.contains("not found") == true ->
-                            "${modelName} は存在しません。\n別のモデルを選択してください。"
-                        error?.message?.contains("API key") == true ->
-                            "APIキーに問題があります。\nモデル: ${modelName}"
-                        else -> "モデル '${modelName}' の検証に失敗しました。\n${error?.message ?: "不明なエラー"}"
-                    }
+                    errorMessage = "✅ 設定は保存されましたが、\n\nモデル '${modelName}' の接続テストに失敗しました。\n\n考えられる原因：\n• ネットワーク環境の問題\n• GCPでAPIが有効化されていない\n• 一時的なサーバーの混雑\n\nこれらを確認の上、別のモデルを選択してください。"
                     showErrorDialog = true
                 }
             }
-        } else {
-            // GCPモードでない、またはAPIキーがない場合はそのまま保存
-            saveAllSettings()
         }
     }
 
@@ -255,7 +243,7 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
             OutlinedTextField(
                 value = geminiApiKeyText,
                 onValueChange = { geminiApiKeyText = it },
-                label = { Text("Gemini API Key") },
+                label = { Text(stringResource(R.string.gemini_api_key_label)) },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = selectedProviderMode == ProviderMode.GCP
             )

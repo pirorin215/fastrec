@@ -38,7 +38,6 @@ fun TranscriptionResultPanel(viewModel: MainViewModel, appSettingsViewModel: App
     val scope = rememberCoroutineScope()
     var showDeleteAllConfirmDialog by remember { mutableStateOf(false) }
     var showDeleteSelectedConfirmDialog by remember { mutableStateOf(false) }
-    var showAddManualTranscriptionDialog by remember { mutableStateOf(false) }
     val fontSize by viewModel.transcriptionFontSize.collectAsState()
     val selectedFileNames by viewModel.selectedFileNames.collectAsState()
     val currentlyPlayingFile by viewModel.currentlyPlayingFile.collectAsState()
@@ -83,9 +82,6 @@ fun TranscriptionResultPanel(viewModel: MainViewModel, appSettingsViewModel: App
                         Icon(Icons.Default.Delete, contentDescription = stringResource(if (isSelectionMode) R.string.delete_selected_content_description else R.string.clear_all_content_description))
                     }
                     
-                    IconButton(onClick = { showAddManualTranscriptionDialog = true }) {
-                        Icon(Icons.Filled.Add, stringResource(R.string.add_manual_transcription_content_description))
-                    }
                 }
             }
             Spacer(modifier = Modifier.height(8.dp)) // Add this Spacer for separation
@@ -233,39 +229,5 @@ fun TranscriptionResultPanel(viewModel: MainViewModel, appSettingsViewModel: App
             )
         }
 
-        if (showAddManualTranscriptionDialog) {
-            var transcriptionText by remember { mutableStateOf("") }
-            AlertDialog(
-                onDismissRequest = { showAddManualTranscriptionDialog = false },
-                title = { Text(stringResource(R.string.new_creation_dialog_title)) },
-                text = {
-                    OutlinedTextField(
-                        value = transcriptionText,
-                        onValueChange = { transcriptionText = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = false,
-                        maxLines = 10
-                    )
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            if (transcriptionText.isNotBlank()) {
-                                viewModel.addManualTranscription(transcriptionText)
-                                transcriptionText = ""
-                                showAddManualTranscriptionDialog = false
-                            }
-                        }
-                    ) {
-                        Text(stringResource(R.string.save_dialog_button))
-                    }
-                },
-                dismissButton = {
-                    OutlinedButton(onClick = { showAddManualTranscriptionDialog = false }) {
-                        Text(stringResource(R.string.cancel_button))
-                    }
-                }
-            )
-        }
     }
 }
