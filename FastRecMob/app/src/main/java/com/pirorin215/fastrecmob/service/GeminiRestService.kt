@@ -21,7 +21,8 @@ class GeminiRestService(
     private val context: Context,
     private val apiKey: String,
     private val modelName: String = "gemini-2.0-flash",
-    private val enableGoogleSearch: Boolean = true
+    private val enableGoogleSearch: Boolean = true,
+    private val systemPrompt: String = "あなたは小さな表示画面向けのAIアシスタントです。必ず答え・結論から書き始め、前置きを省き、100文字以内で応答してください。必要に応じて結論の後に補足を追加できます。"
 ) {
     private val client: OkHttpClient by lazy {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
@@ -76,16 +77,12 @@ class GeminiRestService(
      */
     private fun buildRequestBody(transcription: String): okhttp3.RequestBody {
         val json = JSONObject().apply {
-            // Add contents
             put("contents", JSONArray().apply {
                 put(JSONObject().apply {
                     put("parts", JSONArray().apply {
                         put(JSONObject().apply {
-                            val prompt = buildString {
-                                append("以下の発言内容に対して、役立つ応答を簡潔に生成してください：\n\n")
-                                append(transcription)
-                                append("\n\n応答は100文字以内で実的にしてください。")
-                            }
+                            // Combine system prompt with user input
+                            val prompt = "$systemPrompt\n\n$transcription"
                             put("text", prompt)
                         })
                     })

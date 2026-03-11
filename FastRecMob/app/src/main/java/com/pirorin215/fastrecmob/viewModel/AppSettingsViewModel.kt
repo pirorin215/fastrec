@@ -206,6 +206,13 @@ class AppSettingsViewModel(
             initialValue = true // Default to true (enable Google Search Grounding)
         )
 
+    val geminiSystemPrompt: StateFlow<String> = appSettingsRepository.getFlow(Settings.GEMINI_SYSTEM_PROMPT)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = "あなたは小さな表示画面向けのAIアシスタントです。必ず答え・結論から書き始め、前置きを省き、100文字以内で応答してください。必要に応じて結論の後に補足を追加できます。"
+        )
+
     val gasWebhookUrl: StateFlow<String> = appSettingsRepository.getFlow(Settings.GAS_WEBHOOK_URL)
         .stateIn(
             scope = viewModelScope,
@@ -229,6 +236,12 @@ class AppSettingsViewModel(
     fun saveGeminiApiKey(apiKey: String) {
         viewModelScope.launch {
             appSettingsRepository.setValue(Settings.GEMINI_API_KEY, apiKey)
+        }
+    }
+
+    fun saveGeminiSystemPrompt(prompt: String) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.GEMINI_SYSTEM_PROMPT, prompt)
         }
     }
 

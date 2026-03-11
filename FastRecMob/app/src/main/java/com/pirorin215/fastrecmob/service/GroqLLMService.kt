@@ -51,7 +51,9 @@ class GroqLLMService(
                 }
 
                 // Create prompt for generating a helpful response
-                val systemPrompt = "あなたは役立つアシスタントです。ユーザーの発言に対して、簡潔で実用的な応答を日本語で生成してください。応答は100文字以内に収めてください。"
+                val systemPrompt = "あなたは小さな表示画面向けのAIアシスタントです。結論から簡潔に答えてください。" +
+                    "必ず答え・結論から書き始め、前置きを省き、100文字以内で応答してください。" +
+                    "必要に応じて結論の後に補足を追加できます。"
 
                 val requestBody = JSONObject().apply {
                     put("model", model)

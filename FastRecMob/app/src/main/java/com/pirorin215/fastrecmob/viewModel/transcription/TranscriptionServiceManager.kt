@@ -16,6 +16,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 
 /**
+ * Helper class for combining 4 values
+ */
+private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+
+/**
  * 文字起こし関連サービスの初期化と管理を担当するマネージャークラス
  * SpeechToTextService, GroqSpeechService, GeminiService, GroqLLMServiceの管理
  */
@@ -108,13 +113,17 @@ class TranscriptionServiceManager(
             .combine(appSettingsRepository.getFlow(Settings.GEMINI_ENABLE_GOOGLE_SEARCH)) { (apiKey, model), enableGoogleSearch ->
                 Triple(apiKey, model, enableGoogleSearch)
             }
-            .onEach { (apiKey, model, enableGoogleSearch) ->
+            .combine(appSettingsRepository.getFlow(Settings.GEMINI_SYSTEM_PROMPT)) { (apiKey, model, enableGoogleSearch), systemPrompt ->
+                Quadruple(apiKey, model, enableGoogleSearch, systemPrompt)
+            }
+            .onEach { (apiKey, model, enableGoogleSearch, systemPrompt) ->
                 if (apiKey.isNotBlank()) {
                     geminiService = GeminiRestService(
                         context = context,
                         apiKey = apiKey,
                         modelName = model.modelName,
-                        enableGoogleSearch = enableGoogleSearch
+                        enableGoogleSearch = enableGoogleSearch,
+                        systemPrompt = systemPrompt
                     )
                     val searchStatus = if (enableGoogleSearch) "with Google Search (REST API)" else "without Google Search (REST API)"
                     logManager.addDebugLog("Gemini REST service initialized with model: ${model.modelName} ($searchStatus)")

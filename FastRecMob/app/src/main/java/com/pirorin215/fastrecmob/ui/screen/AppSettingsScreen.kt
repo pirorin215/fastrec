@@ -91,6 +91,7 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
     val currentLowVoltageNotifyEveryTime by appSettingsViewModel.lowVoltageNotifyEveryTime.collectAsState()
     val currentTranscriptionNotificationEnabled by appSettingsViewModel.transcriptionNotificationEnabled.collectAsState()
     val currentGeminiEnableGoogleSearch by appSettingsViewModel.geminiEnableGoogleSearch.collectAsState()
+    val currentGeminiSystemPrompt by appSettingsViewModel.geminiSystemPrompt.collectAsState()
     val modelValidationStatus by appSettingsViewModel.modelValidationStatus.collectAsState()
     val modelValidationError by appSettingsViewModel.modelValidationError.collectAsState()
 
@@ -113,6 +114,7 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
     var lowVoltageThresholdText by remember(currentLowVoltageThreshold) { mutableStateOf(if (currentLowVoltageThreshold == 0f) "" else currentLowVoltageThreshold.toString()) }
     var lowVoltageNotifyEveryTimeChecked by remember(currentLowVoltageNotifyEveryTime) { mutableStateOf(currentLowVoltageNotifyEveryTime) }
     var transcriptionNotificationEnabledChecked by remember(currentTranscriptionNotificationEnabled) { mutableStateOf(currentTranscriptionNotificationEnabled) }
+    var geminiSystemPromptText by remember(currentGeminiSystemPrompt) { mutableStateOf(currentGeminiSystemPrompt) }
 
     // ダイアログ用state
     var showErrorDialog by remember { mutableStateOf(false) }
@@ -143,6 +145,7 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
         appSettingsViewModel.saveLowVoltageThreshold(lowVoltageThreshold)
         appSettingsViewModel.saveLowVoltageNotifyEveryTime(lowVoltageNotifyEveryTimeChecked)
         appSettingsViewModel.saveTranscriptionNotificationEnabled(transcriptionNotificationEnabledChecked)
+        appSettingsViewModel.saveGeminiSystemPrompt(geminiSystemPromptText)
         onBack()
     }
 
@@ -255,6 +258,25 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
                 label = { Text("Groq API Key") },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = selectedProviderMode == ProviderMode.GROQ
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Gemini System Prompt (editable text area)
+            Text(
+                text = "AIシステムプロンプト（Gemini用）",
+                style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            OutlinedTextField(
+                value = geminiSystemPromptText,
+                onValueChange = { geminiSystemPromptText = it },
+                label = { Text("システムプロンプト") },
+                placeholder = { Text("AIへの指示を入力...") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = selectedProviderMode == ProviderMode.GCP,
+                minLines = 3,
+                maxLines = 6
             )
             Spacer(modifier = Modifier.height(16.dp))
 

@@ -217,6 +217,11 @@ object Settings {
         fromStored = { GeminiModel.fromString(it) }
     )
 
+    val GEMINI_SYSTEM_PROMPT = SettingKey.Direct(
+        stringPreferencesKey("gemini_system_prompt"),
+        "あなたは小さな表示画面向けのAIアシスタントです。必ず答え・結論から書き始め、前置きを省き、100文字以内で応答してください。必要に応じて結論の後に補足を追加できます。"
+    )
+
     val TRANSCRIPTION_CACHE_LIMIT = SettingKey.Direct(
         intPreferencesKey("transcription_cache_limit"),
         100
