@@ -120,6 +120,7 @@ dependencies {
 
     // Gemini API for AI button feature
     implementation(libs.generativeai)
+    implementation(libs.google.genai)
 
     // DataStore for persistent settings
     implementation(libs.androidx.datastore.preferences)
