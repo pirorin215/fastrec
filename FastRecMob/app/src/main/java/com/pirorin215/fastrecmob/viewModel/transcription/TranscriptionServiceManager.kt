@@ -7,7 +7,7 @@ import com.pirorin215.fastrecmob.data.TranscriptionProvider
 import com.pirorin215.fastrecmob.data.AIProvider
 import com.pirorin215.fastrecmob.service.SpeechToTextService
 import com.pirorin215.fastrecmob.service.GroqSpeechService
-import com.pirorin215.fastrecmob.service.GeminiService
+import com.pirorin215.fastrecmob.service.GeminiRestService
 import com.pirorin215.fastrecmob.service.GroqLLMService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.launchIn
@@ -31,10 +31,10 @@ class TranscriptionServiceManager(
     var groqSpeechService: GroqSpeechService? = null
         private set
 
-    var geminiService: GeminiService? = null
+    var groqLLMService: GroqLLMService? = null
         private set
 
-    var groqLLMService: GroqLLMService? = null
+    var geminiService: GeminiRestService? = null
         private set
 
     /**
@@ -105,13 +105,22 @@ class TranscriptionServiceManager(
             .combine(appSettingsRepository.getFlow(Settings.GEMINI_MODEL)) { apiKey, model ->
                 Pair(apiKey, model)
             }
-            .onEach { (apiKey, model) ->
+            .combine(appSettingsRepository.getFlow(Settings.GEMINI_ENABLE_GOOGLE_SEARCH)) { (apiKey, model), enableGoogleSearch ->
+                Triple(apiKey, model, enableGoogleSearch)
+            }
+            .onEach { (apiKey, model, enableGoogleSearch) ->
                 if (apiKey.isNotBlank()) {
-                    geminiService = GeminiService(context, apiKey, model.modelName)
-                    logManager.addDebugLog("Gemini service initialized with model: ${model.modelName}")
+                    geminiService = GeminiRestService(
+                        context = context,
+                        apiKey = apiKey,
+                        modelName = model.modelName,
+                        enableGoogleSearch = enableGoogleSearch
+                    )
+                    val searchStatus = if (enableGoogleSearch) "with Google Search (REST API)" else "without Google Search (REST API)"
+                    logManager.addDebugLog("Gemini REST service initialized with model: ${model.modelName} ($searchStatus)")
                 } else {
                     geminiService = null
-                    logManager.addDebugLog("Gemini service cleared: no API key")
+                    logManager.addDebugLog("Gemini REST service cleared: no API key")
                 }
             }
             .launchIn(scope)

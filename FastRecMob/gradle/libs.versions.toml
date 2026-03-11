@@ -23,6 +23,7 @@ composereorderable = "0.9.6"
 kotlinxCoroutinesGuava = "1.7.3"
 generativeai = "0.9.0"  # Gemini API
 koin = "3.5.0"
+grpcOkhttp = "1.68.1"  # gRPC with minSdk 26+ support
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -53,7 +54,7 @@ google-play-services-auth = { group = "com.google.android.gms", name = "play-ser
 google-cloud-libraries-bom = { group = "com.google.cloud", name = "libraries-bom", version.ref = "googleCloudLibrariesBom" }
 google-cloud-speech = { group = "com.google.cloud", name = "google-cloud-speech" }
 kotlinx-coroutines-guava = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-guava", version.ref = "kotlinxCoroutinesGuava" }
-grpc-okhttp = { group = "io.grpc", name = "grpc-okhttp" }
+grpc-okhttp = { group = "io.grpc", name = "grpc-okhttp", version.ref = "grpcOkhttp" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }
 composereorderable = { group = "org.burnoutcrew.composereorderable", name = "reorderable", version.ref = "composereorderable" }
 generativeai = { group = "com.google.ai.client.generativeai", name = "generativeai", version.ref = "generativeai" }

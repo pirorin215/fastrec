@@ -199,6 +199,13 @@ class AppSettingsViewModel(
             initialValue = false // Default to OFF
         )
 
+    val geminiEnableGoogleSearch: StateFlow<Boolean> = appSettingsRepository.getFlow(Settings.GEMINI_ENABLE_GOOGLE_SEARCH)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true // Default to true (enable Google Search Grounding)
+        )
+
     val gasWebhookUrl: StateFlow<String> = appSettingsRepository.getFlow(Settings.GAS_WEBHOOK_URL)
         .stateIn(
             scope = viewModelScope,
@@ -367,6 +374,12 @@ class AppSettingsViewModel(
     fun saveEnableGoogleTaskDue(enable: Boolean) {
         viewModelScope.launch {
             appSettingsRepository.setValue(Settings.ENABLE_GOOGLE_TASK_DUE, enable)
+        }
+    }
+
+    fun saveGeminiEnableGoogleSearch(enable: Boolean) {
+        viewModelScope.launch {
+            appSettingsRepository.setValue(Settings.GEMINI_ENABLE_GOOGLE_SEARCH, enable)
         }
     }
 

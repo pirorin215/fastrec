@@ -107,12 +107,12 @@ class TranscriptionManager(
         get() = serviceManager.groqSpeechService
         private set(_) {}
 
-    var geminiService: com.pirorin215.fastrecmob.service.GeminiService?
-        get() = serviceManager.geminiService
-        private set(_) {}
-
     var groqLLMService: com.pirorin215.fastrecmob.service.GroqLLMService?
         get() = serviceManager.groqLLMService
+        private set(_) {}
+
+    var geminiService: com.pirorin215.fastrecmob.service.GeminiRestService?
+        get() = serviceManager.geminiService
         private set(_) {}
 
     /**

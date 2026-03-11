@@ -90,6 +90,7 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
     val currentLowVoltageThreshold by appSettingsViewModel.lowVoltageThreshold.collectAsState()
     val currentLowVoltageNotifyEveryTime by appSettingsViewModel.lowVoltageNotifyEveryTime.collectAsState()
     val currentTranscriptionNotificationEnabled by appSettingsViewModel.transcriptionNotificationEnabled.collectAsState()
+    val currentGeminiEnableGoogleSearch by appSettingsViewModel.geminiEnableGoogleSearch.collectAsState()
     val modelValidationStatus by appSettingsViewModel.modelValidationStatus.collectAsState()
     val modelValidationError by appSettingsViewModel.modelValidationError.collectAsState()
 
@@ -361,6 +362,35 @@ fun AppSettingsScreen(appSettingsViewModel: AppSettingsViewModel, onBack: () -> 
                             }
                         )
                     }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Google Search Grounding toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Google検索グラウンディング",
+                            fontSize = 16.sp
+                        )
+                        Text(
+                            text = "最新情報に基づいた回答を生成",
+                            fontSize = 12.sp,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = currentGeminiEnableGoogleSearch,
+                        onCheckedChange = { checked ->
+                            coroutineScope.launch {
+                                appSettingsViewModel.saveGeminiEnableGoogleSearch(checked)
+                            }
+                        },
+                        colors = SwitchDefaults.colors()
+                    )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }

@@ -315,6 +315,11 @@ object Settings {
         booleanPreferencesKey("enable_google_task_due"),
         true // Default to true (enable due date)
     )
+
+    val GEMINI_ENABLE_GOOGLE_SEARCH = SettingKey.Direct(
+        booleanPreferencesKey("gemini_enable_google_search"),
+        true // Default to true (enable Google Search Grounding)
+    )
 }
 
 class AppSettingsRepository(private val context: Context) {
