@@ -1,6 +1,7 @@
 package com.pirorin215.fastrecmob.service
 
 import android.content.Context
+import com.pirorin215.fastrecmob.data.DEFAULT_AI_SYSTEM_PROMPT
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -22,7 +23,7 @@ class GeminiRestService(
     private val apiKey: String,
     private val modelName: String = "gemini-2.0-flash",
     private val enableGoogleSearch: Boolean = true,
-    private val systemPrompt: String = "あなたは小さな表示画面向けのAIアシスタントです。必ず答え・結論から書き始め、前置きを省き、100文字以内で応答してください。必要に応じて結論の後に補足を追加できます。"
+    private val systemPrompt: String = DEFAULT_AI_SYSTEM_PROMPT
 ) {
     private val client: OkHttpClient by lazy {
         val loggingInterceptor = HttpLoggingInterceptor().apply {

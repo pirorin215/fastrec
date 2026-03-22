@@ -171,6 +171,12 @@ data class GeminiModel(
 }
 
 /**
+ * Default system prompt for AI assistants in this app
+ * Used when no custom prompt is configured
+ */
+const val DEFAULT_AI_SYSTEM_PROMPT = "応答は結論のみで倒置法にしてください。"
+
+/**
  * Centralized definition of all app settings
  */
 object Settings {
@@ -219,7 +225,7 @@ object Settings {
 
     val GEMINI_SYSTEM_PROMPT = SettingKey.Direct(
         stringPreferencesKey("gemini_system_prompt"),
-        "あなたは小さな表示画面向けのAIアシスタントです。必ず答え・結論から書き始め、前置きを省き、100文字以内で応答してください。必要に応じて結論の後に補足を追加できます。"
+        DEFAULT_AI_SYSTEM_PROMPT
     )
 
     val TRANSCRIPTION_CACHE_LIMIT = SettingKey.Direct(

@@ -5,6 +5,7 @@ import com.pirorin215.fastrecmob.data.AppSettingsRepository
 import com.pirorin215.fastrecmob.data.Settings
 import com.pirorin215.fastrecmob.data.TranscriptionProvider
 import com.pirorin215.fastrecmob.data.AIProvider
+import com.pirorin215.fastrecmob.data.GeminiModel
 import com.pirorin215.fastrecmob.service.SpeechToTextService
 import com.pirorin215.fastrecmob.service.GroqSpeechService
 import com.pirorin215.fastrecmob.service.GeminiRestService
@@ -16,9 +17,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 
 /**
- * Helper class for combining 4 values
+ * Configuration for Gemini REST service initialization
  */
-private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+private data class GeminiServiceConfig(
+    val apiKey: String,
+    val model: GeminiModel,
+    val enableGoogleSearch: Boolean,
+    val systemPrompt: String
+)
 
 /**
  * 文字起こし関連サービスの初期化と管理を担当するマネージャークラス
@@ -114,19 +120,19 @@ class TranscriptionServiceManager(
                 Triple(apiKey, model, enableGoogleSearch)
             }
             .combine(appSettingsRepository.getFlow(Settings.GEMINI_SYSTEM_PROMPT)) { (apiKey, model, enableGoogleSearch), systemPrompt ->
-                Quadruple(apiKey, model, enableGoogleSearch, systemPrompt)
+                GeminiServiceConfig(apiKey, model, enableGoogleSearch, systemPrompt)
             }
-            .onEach { (apiKey, model, enableGoogleSearch, systemPrompt) ->
-                if (apiKey.isNotBlank()) {
+            .onEach { config ->
+                if (config.apiKey.isNotBlank()) {
                     geminiService = GeminiRestService(
                         context = context,
-                        apiKey = apiKey,
-                        modelName = model.modelName,
-                        enableGoogleSearch = enableGoogleSearch,
-                        systemPrompt = systemPrompt
+                        apiKey = config.apiKey,
+                        modelName = config.model.modelName,
+                        enableGoogleSearch = config.enableGoogleSearch,
+                        systemPrompt = config.systemPrompt
                     )
-                    val searchStatus = if (enableGoogleSearch) "with Google Search (REST API)" else "without Google Search (REST API)"
-                    logManager.addDebugLog("Gemini REST service initialized with model: ${model.modelName} ($searchStatus)")
+                    val searchStatus = if (config.enableGoogleSearch) "with Google Search (REST API)" else "without Google Search (REST API)"
+                    logManager.addDebugLog("Gemini REST service initialized with model: ${config.model.modelName} ($searchStatus)")
                 } else {
                     geminiService = null
                     logManager.addDebugLog("Gemini REST service cleared: no API key")

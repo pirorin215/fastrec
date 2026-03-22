@@ -7,6 +7,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -47,6 +48,15 @@ fun TranscriptionResultPanel(viewModel: MainViewModel, appSettingsViewModel: App
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
 
+    val listState = rememberLazyListState()
+    var previousResultCount by remember { mutableIntStateOf(0) }
+    LaunchedEffect(transcriptionResults.size) {
+        if (transcriptionResults.size > previousResultCount) {
+            listState.animateScrollToItem(0)
+        }
+        previousResultCount = transcriptionResults.size
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             Card(
@@ -58,7 +68,7 @@ fun TranscriptionResultPanel(viewModel: MainViewModel, appSettingsViewModel: App
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp), // Added padding for better spacing
+                        .padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val isSelectionMode = selectedFileNames.isNotEmpty()
@@ -69,7 +79,7 @@ fun TranscriptionResultPanel(viewModel: MainViewModel, appSettingsViewModel: App
                         stringResource(R.string.transcription_audio_stats, transcriptionCount, audioFileCount),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f) // Give it weight to push other elements
+                        modifier = Modifier.weight(1f)
                     )
 
                     IconButton(onClick = {
@@ -81,11 +91,11 @@ fun TranscriptionResultPanel(viewModel: MainViewModel, appSettingsViewModel: App
                     }) {
                         Icon(Icons.Default.Delete, contentDescription = stringResource(if (isSelectionMode) R.string.delete_selected_content_description else R.string.clear_all_content_description))
                     }
-                    
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp)) // Add this Spacer for separation
+            Spacer(modifier = Modifier.height(8.dp))
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize()
             ) {
                 if (transcriptionResults.isEmpty()) {
@@ -154,80 +164,79 @@ fun TranscriptionResultPanel(viewModel: MainViewModel, appSettingsViewModel: App
                     }
                 }
             }
-    }
-        selectedResultForDetail?.let { result ->
-            val audioFilePath = FileUtil.getAudioFilePath(context, result.fileName)
-            val isPlayingAudioFile = remember(currentlyPlayingFile, audioFilePath) {
-                derivedStateOf { currentlyPlayingFile == audioFilePath }
+            selectedResultForDetail?.let { result ->
+                val audioFilePath = FileUtil.getAudioFilePath(context, result.fileName)
+                val isPlayingAudioFile = remember(currentlyPlayingFile, audioFilePath) {
+                    derivedStateOf { currentlyPlayingFile == audioFilePath }
+                }
+                TranscriptionDetailBottomSheet(
+                    result = result,
+                    fontSize = fontSize,
+                    audioFileExists = FileUtil.audioFileExists(context, result.fileName),
+                    audioDirName = audioDirName,
+                    isPlaying = isPlayingAudioFile.value,
+                    onPlay = { transcriptionResult ->
+                        viewModel.playAudioFile(transcriptionResult)
+                    },
+                    onStop = { viewModel.stopAudioFile() },
+                    onDelete = { transcriptionResult ->
+                        scope.launch {
+                            viewModel.removeTranscriptionResult(transcriptionResult)
+                            selectedResultForDetail = null
+                        }
+                    },
+                    onSave = { originalResult, newText, newNote ->
+                        scope.launch {
+                            viewModel.updateTranscriptionResult(originalResult, newText, newNote)
+                            selectedResultForDetail = null
+                        }
+                    },
+                    onRetranscribe = { transcriptionResult ->
+                        scope.launch {
+                            viewModel.retranscribe(transcriptionResult)
+                            selectedResultForDetail = null
+                        }
+                    },
+                    onDismiss = { selectedResultForDetail = null }
+                )
             }
-            TranscriptionDetailBottomSheet(
-                result = result,
-                fontSize = fontSize,
-                audioFileExists = FileUtil.audioFileExists(context, result.fileName),
-                audioDirName = audioDirName,
-                isPlaying = isPlayingAudioFile.value,
-                onPlay = { transcriptionResult ->
-                    viewModel.playAudioFile(transcriptionResult)
-                },
-                onStop = { viewModel.stopAudioFile() },
-                onDelete = { transcriptionResult ->
-                    scope.launch {
-                        viewModel.removeTranscriptionResult(transcriptionResult)
-                        selectedResultForDetail = null
-                    }
-                },
-                onSave = { originalResult, newText, newNote ->
-                    scope.launch {
-                        viewModel.updateTranscriptionResult(originalResult, newText, newNote)
-                        selectedResultForDetail = null
-                    }
-                },
-                onRetranscribe = { transcriptionResult ->
-                    scope.launch {
-                        viewModel.retranscribe(transcriptionResult)
-                        selectedResultForDetail = null
-                    }
-                },
-                onDismiss = { selectedResultForDetail = null }
-            )
-        }
 
-        if (showDeleteAllConfirmDialog) {
-            AlertDialog(
-                onDismissRequest = { showDeleteAllConfirmDialog = false },
-                title = { Text(stringResource(R.string.clear_all_dialog_title)) },
-                text = { Text(stringResource(R.string.clear_all_dialog_message)) },
-                confirmButton = {
-                    Button(onClick = {
-                        scope.launch {
-                            viewModel.clearTranscriptionResults()
-                            showDeleteAllConfirmDialog = false
-                        }
-                    }) { Text(stringResource(R.string.delete_button)) }
-                },
-                dismissButton = {
-                    OutlinedButton(onClick = { showDeleteAllConfirmDialog = false }) { Text(stringResource(R.string.cancel_button)) }
-                }
-            )
+            if (showDeleteAllConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteAllConfirmDialog = false },
+                    title = { Text(stringResource(R.string.clear_all_dialog_title)) },
+                    text = { Text(stringResource(R.string.clear_all_dialog_message)) },
+                    confirmButton = {
+                        Button(onClick = {
+                            scope.launch {
+                                viewModel.clearTranscriptionResults()
+                                showDeleteAllConfirmDialog = false
+                            }
+                        }) { Text(stringResource(R.string.delete_button)) }
+                    },
+                    dismissButton = {
+                        OutlinedButton(onClick = { showDeleteAllConfirmDialog = false }) { Text(stringResource(R.string.cancel_button)) }
+                    }
+                )
+            }
+            if (showDeleteSelectedConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteSelectedConfirmDialog = false },
+                    title = { Text(stringResource(R.string.delete_selected_dialog_title)) },
+                    text = { Text(stringResource(R.string.delete_selected_dialog_message, selectedFileNames.size)) },
+                    confirmButton = {
+                        Button(onClick = {
+                            scope.launch {
+                                viewModel.removeTranscriptionResults(selectedFileNames)
+                                showDeleteSelectedConfirmDialog = false
+                            }
+                        }) { Text(stringResource(R.string.delete_button)) }
+                    },
+                    dismissButton = {
+                        OutlinedButton(onClick = { showDeleteSelectedConfirmDialog = false }) { Text(stringResource(R.string.cancel_button)) }
+                    }
+                )
+            }
         }
-        if (showDeleteSelectedConfirmDialog) {
-            AlertDialog(
-                onDismissRequest = { showDeleteSelectedConfirmDialog = false },
-                title = { Text(stringResource(R.string.delete_selected_dialog_title)) },
-                text = { Text(stringResource(R.string.delete_selected_dialog_message, selectedFileNames.size)) },
-                confirmButton = {
-                    Button(onClick = {
-                        scope.launch {
-                            viewModel.removeTranscriptionResults(selectedFileNames)
-                            showDeleteSelectedConfirmDialog = false
-                        }
-                    }) { Text(stringResource(R.string.delete_button)) }
-                },
-                dismissButton = {
-                    OutlinedButton(onClick = { showDeleteSelectedConfirmDialog = false }) { Text(stringResource(R.string.cancel_button)) }
-                }
-            )
-        }
-
     }
 }

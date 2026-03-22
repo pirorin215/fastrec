@@ -10,6 +10,7 @@ import com.pirorin215.fastrecmob.data.TranscriptionProvider
 import com.pirorin215.fastrecmob.data.AIProvider
 import com.pirorin215.fastrecmob.data.ProviderMode
 import com.pirorin215.fastrecmob.data.GeminiModel
+import com.pirorin215.fastrecmob.data.DEFAULT_AI_SYSTEM_PROMPT
 import com.pirorin215.fastrecmob.service.SpeechToTextService
 import com.pirorin215.fastrecmob.service.GroqSpeechService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -210,7 +211,7 @@ class AppSettingsViewModel(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = "あなたは小さな表示画面向けのAIアシスタントです。必ず答え・結論から書き始め、前置きを省き、100文字以内で応答してください。必要に応じて結論の後に補足を追加できます。"
+            initialValue = DEFAULT_AI_SYSTEM_PROMPT
         )
 
     val gasWebhookUrl: StateFlow<String> = appSettingsRepository.getFlow(Settings.GAS_WEBHOOK_URL)
