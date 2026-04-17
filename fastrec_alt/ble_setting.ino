@@ -447,6 +447,47 @@ static std::string handle_set_time(const std::string& value) {
   }
 }
 
+// デフォルトのsetting.iniを生成する関数
+bool createDefaultSettingIni() {
+  File file = LittleFS.open("/setting.ini", "w");
+  if (!file) {
+    applog("Failed to create default setting.ini");
+    return false;
+  }
+
+  // デフォルト設定値を書き込む
+  file.println("# Fastrec Default Settings");
+  file.println("# Auto-generated on initialization");
+  file.println("");
+  file.println("# Power Settings");
+  file.printf("DEEP_SLEEP_DELAY_MS=%lu\n", DEEP_SLEEP_DELAY_MS);
+  file.printf("DEEP_SLEEP_CYCLE_MINUTES=%lu\n", DEEP_SLEEP_CYCLE_MINUTES);
+  file.println("");
+  file.println("# Battery Settings");
+  file.printf("BAT_VOL_MIN=%.1f\n", BAT_VOL_MIN);
+  file.printf("BAT_VOL_MULT=%.1f\n", BAT_VOL_MULT);
+  file.println("");
+  file.println("# Audio Settings");
+  file.printf("I2S_SAMPLE_RATE=%d\n", I2S_SAMPLE_RATE);
+  file.printf("REC_MAX_S=%d\n", REC_MAX_S);
+  file.printf("REC_MIN_S=%d\n", REC_MIN_S);
+  file.printf("AUDIO_GAIN=%.1f\n", AUDIO_GAIN);
+  file.printf("USE_ADPCM=%s\n", USE_ADPCM ? "true" : "false");
+  file.println("");
+  file.println("# Vibration Settings");
+  file.printf("VIBRA_STARTUP_MS=%lu\n", VIBRA_STARTUP_MS);
+  file.printf("VIBRA_REC_START_MS=%lu\n", VIBRA_REC_START_MS);
+  file.printf("VIBRA_REC_STOP_MS=%lu\n", VIBRA_REC_STOP_MS);
+  file.printf("VIBRA=%s\n", VIBRA ? "true" : "false");
+  file.println("");
+  file.println("# Development");
+  file.printf("DEV_MODE=%s\n", DEV_MODE ? "true" : "false");
+
+  file.close();
+  applog("Default setting.ini created successfully");
+  return true;
+}
+
 static void handle_cmd_reset_all() {
   if (!LittleFS.begin(true)) {
     pResponseCharacteristic->setValue("LittleFS Mount Failed");
@@ -487,10 +528,21 @@ static void handle_cmd_reset_all() {
   }
   root.close();
 
-  char response[50];
-  sprintf(response, "Deleted %d files.", deleted_count);
-  pResponseCharacteristic->setValue(response);
-  pResponseCharacteristic->notify();
+  // デフォルトのsetting.iniを生成
+  if (createDefaultSettingIni()) {
+    char response[100];
+    sprintf(response, "Deleted %d files. Created default setting.ini. Restarting...", deleted_count);
+    pResponseCharacteristic->setValue(response);
+    pResponseCharacteristic->notify();
+    applog("Reset complete: %d files deleted, default setting.ini created", deleted_count);
+  } else {
+    char response[100];
+    sprintf(response, "Deleted %d files. Failed to create default setting.ini. Restarting...", deleted_count);
+    pResponseCharacteristic->setValue(response);
+    pResponseCharacteristic->notify();
+    applog("Reset complete: %d files deleted, but failed to create default setting.ini", deleted_count);
+  }
+
   delay(100);
   ESP.restart();
 }

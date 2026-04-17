@@ -46,6 +46,9 @@ unsigned long MAX_REC_DURATION_MS = REC_MAX_S * 1000;  // Max recording duration
 const size_t I2S_BUFFER_SIZE = 1024; // Defined here as it's a constant
 bool USE_ADPCM = false;
 
+// FreeRTOS Task Stack Sizes
+const size_t TASK_STACK_SIZE = 8192;  // 8KB stack size for audio tasks (prevents stack overflow)
+
 // LittleFS
 const unsigned long MIN_FREE_SPACE_MB = 1;  // Minimum 1MB free space required on LittleFS
 
@@ -189,5 +192,6 @@ int g_chunk_burst_size = 8;
 std::string g_lastBleCommand;
 
 // Function Prototypes ---
+bool createDefaultSettingIni();
 
 #endif // FASTREC_INO_H

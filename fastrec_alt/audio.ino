@@ -124,7 +124,7 @@ bool initI2SMicrophone() {
   g_audio_buffer.resize(I2S_SAMPLE_RATE * buffer_seconds);
   applog("Audio buffer size: %d for %d seconds", g_audio_buffer.size(), buffer_seconds);
 
-  BaseType_t taskCreated = xTaskCreatePinnedToCore(i2s_read_task, "I2SReaderTask", 4096, NULL, 10, &g_i2s_reader_task_handle, 1);
+  BaseType_t taskCreated = xTaskCreatePinnedToCore(i2s_read_task, "I2SReaderTask", TASK_STACK_SIZE, NULL, 10, &g_i2s_reader_task_handle, 1);
   if (taskCreated != pdPASS) {
     applog("ERROR: Failed to create I2S reader task!");
     vSemaphoreDelete(g_buffer_mutex);
@@ -202,7 +202,7 @@ void startRecording() {
 
   if (USE_ADPCM) {
     // Higher priority for encoder task
-    BaseType_t encoderCreated = xTaskCreatePinnedToCore(audio_writer_task, "AudioEncoderTask", 4096, NULL, 6, &g_audio_writer_task_handle, 0);
+    BaseType_t encoderCreated = xTaskCreatePinnedToCore(audio_writer_task, "AudioEncoderTask", TASK_STACK_SIZE, NULL, 6, &g_audio_writer_task_handle, 0);
     if (encoderCreated != pdPASS) {
       applog("ERROR: Failed to create audio encoder task!");
       g_is_buffering = false;
@@ -213,7 +213,7 @@ void startRecording() {
       return;
     }
     // Lower priority for writer task
-    BaseType_t writerCreated = xTaskCreatePinnedToCore(file_writer_task, "FileWriterTask", 4096, NULL, 4, &g_file_writer_task_handle, 0);
+    BaseType_t writerCreated = xTaskCreatePinnedToCore(file_writer_task, "FileWriterTask", TASK_STACK_SIZE, NULL, 4, &g_file_writer_task_handle, 0);
     if (writerCreated != pdPASS) {
       applog("ERROR: Failed to create file writer task!");
       g_is_buffering = false;
@@ -226,7 +226,7 @@ void startRecording() {
       return;
     }
   } else {
-    BaseType_t writerCreated = xTaskCreatePinnedToCore(audio_writer_task, "AudioWriterTask", 4096, NULL, 6, &g_audio_writer_task_handle, 0);
+    BaseType_t writerCreated = xTaskCreatePinnedToCore(audio_writer_task, "AudioWriterTask", TASK_STACK_SIZE, NULL, 6, &g_audio_writer_task_handle, 0);
     if (writerCreated != pdPASS) {
       applog("ERROR: Failed to create audio writer task!");
       g_is_buffering = false;
@@ -362,21 +362,21 @@ void finalizeRecording() {
 
 void i2s_read_task(void *pvParameters) { // check_unused:ignore
   const size_t i2s_buffer_samples = 256;
-  int32_t* raw_samples = (int32_t*) malloc(i2s_buffer_samples * sizeof(int32_t));
+  int32_t raw_samples[i2s_buffer_samples];  // Use stack instead of heap to avoid memory leak
   size_t bytes_read;
 
   while (true) {
     if (g_is_buffering) {
       i2s_read(I2S_NUM_0, (char*)raw_samples, i2s_buffer_samples * sizeof(int32_t), &bytes_read, portMAX_DELAY);
-      
+
       if (bytes_read > 0) {
         size_t samples_read = bytes_read / sizeof(int32_t);
-        
+
         xSemaphoreTake(g_buffer_mutex, portMAX_DELAY);
         for (size_t i = 0; i < samples_read; i++) {
           // Convert 32-bit to 16-bit
           int32_t val = raw_samples[i] >> 16;
-          
+
           // Amplify audio (inlined from amplifyAudio function)
           val = val * AUDIO_GAIN;
           if (val > 32767) val = 32767;
@@ -403,7 +403,6 @@ void i2s_read_task(void *pvParameters) { // check_unused:ignore
       vTaskDelay(pdMS_TO_TICKS(50));
     }
   }
-  free(raw_samples);
 }
 
 void updateMinAudioFileSize() {

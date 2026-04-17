@@ -129,24 +129,10 @@ void goDeepSleep() {
     int seconds_until_next_hour = 60 - timeinfo.tm_sec;
     int total_seconds = (minutes_until_next_hour * 60) + seconds_until_next_hour;
 
-    // 元の次の正時を計算（ログ出力用）
-    int original_next_hour = (timeinfo.tm_hour + 1) % 24;
-
-    // 残り時間が5分未満の場合は、次の次の正時まで待つ（頻繁な復帰を避ける）
-    bool skipped = false;
-    if (total_seconds < 300) {
-      applog("次の正時まで%d秒しかないため、次の正時(%02d:00)をスキップします", total_seconds, original_next_hour);
-      total_seconds += 3600; // 1時間追加
-      skipped = true;
-    }
-
-    // 最終的な起床時間を計算
-    int final_hour = (original_next_hour + (skipped ? 1 : 0)) % 24;
-
     // マイクロ秒に変換
     uint64_t sleep_time_us = (uint64_t)total_seconds * 1000000ULL;
 
-    applog("Next wakeup in %d seconds (at %02d:00)%s", total_seconds, final_hour, skipped ? " [skipped next hour]" : "");
+    applog("Next wakeup in %d seconds (at %02d:00)", total_seconds, (timeinfo.tm_hour + 1) % 24);
     esp_sleep_enable_timer_wakeup(sleep_time_us);
   } else {
     // 従来の固定時間モード
@@ -615,6 +601,13 @@ void setup() {
   initSSD();
     
   if (!loadSettingsFromLittleFS()) {
+    // setting.iniが存在しない場合、デフォルト設定を生成
+    applog("Setting file not found. Creating default setting.ini...");
+    if (createDefaultSettingIni()) {
+      applog("Default setting.ini created. Please configure via BLE app.");
+    } else {
+      applog("Failed to create default setting.ini.");
+    }
     setAppState(SETUP, false);  // setAppState() 内で g_lastActivityTime がリセットされる
   }
 
