@@ -117,6 +117,7 @@ fun SettingsList(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item { SettingTextField("Deep Sleep Delay (ms)", settings.deepSleepDelayMs, KeyboardType.Number) { onSettingChange(settings.copy(deepSleepDelayMs = it)) } }
+        item { SettingTextField("Sleep Adj", settings.sleepAdj, KeyboardType.Decimal) { onSettingChange(settings.copy(sleepAdj = it)) } }
         item { SettingTextField("Min Battery Voltage", settings.batVolMin, KeyboardType.Decimal) { onSettingChange(settings.copy(batVolMin = it)) } }
         item { SettingTextField("Battery Voltage Multiplier", settings.batVolMult, KeyboardType.Decimal) { onSettingChange(settings.copy(batVolMult = it)) } }
         item { SettingTextField("I2S Sample Rate", settings.i2sSampleRate, KeyboardType.Number) { onSettingChange(settings.copy(i2sSampleRate = it)) } }

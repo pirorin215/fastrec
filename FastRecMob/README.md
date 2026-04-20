@@ -230,3 +230,34 @@ testImplementation("androidx.arch.core:core-testing:2.2.0")
 - `MainActivity`: アプリのエントリーポイント
 - `BleScanService`: バックグラウンドBLEスキャン
 - `BootCompletedReceiver`: 起動時自動実行
+
+## デバイス履歴の保存ルール
+
+### 設計意図
+
+- 録音利用時は毎回BLE接続発生
+- 全履歴保存でデータ膨大化
+- 移動検出時は紛失防止タグとして機能
+
+### 保存条件
+
+以下の**両方**を満たす場合は履歴を保存しない（重複除外）:
+
+1. **時間条件**: 前回保存から30分以内
+   - 定数: `TimeConstants.DEVICE_HISTORY_TIME_THRESHOLD_MS = 30分`
+
+2. **位置条件**: 位置が類似
+   - 定数: `LocationConstants.LOCATION_THRESHOLD`
+   - 判定: 緯度・経度の差分二乗和が閾値未満
+
+### 特殊ケース
+
+- **移動検出時**: 位置非類似なら経過時間に関わらず保存
+- **初回接続**: 履歴空なら無条件保存
+- **位置情報なし**: 位置不完全なら「非類似」とみなす
+
+### 実装
+
+- クラス: `DeviceHistoryRepository.addEntry()`
+- ファイル: `app/src/main/java/com/pirorin215/fastrecmob/data/DeviceHistoryRepository.kt`
+- ロジック: 64行目の重複除外判定

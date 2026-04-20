@@ -129,15 +129,20 @@ void goDeepSleep() {
     int seconds_until_next_hour = 60 - timeinfo.tm_sec;
     int total_seconds = (minutes_until_next_hour * 60) + seconds_until_next_hour;
 
-    // マイクロ秒に変換
-    uint64_t sleep_time_us = (uint64_t)total_seconds * 1000000ULL;
+    // スリープ時間補正（内蔵RTCドリフト対策）
+    int corrected_seconds = (int)(total_seconds * SLEEP_ADJ);
 
-    applog("Next wakeup in %d seconds (at %02d:00)", total_seconds, (timeinfo.tm_hour + 1) % 24);
+    // マイクロ秒に変換
+    uint64_t sleep_time_us = (uint64_t)corrected_seconds * 1000000ULL;
+
+    applog("Next wakeup in %d seconds (corrected from %d seconds, adj=%.3f) at %02d:00",
+           corrected_seconds, total_seconds, SLEEP_ADJ, (timeinfo.tm_hour + 1) % 24);
     esp_sleep_enable_timer_wakeup(sleep_time_us);
   } else {
     // 従来の固定時間モード
-    applog("Next wakeup in %lu minutes", DEEP_SLEEP_CYCLE_MINUTES);
-    esp_sleep_enable_timer_wakeup(DEEP_SLEEP_CYCLE_MS * 1000); // DEEP_SLEEP_CYCLE_MS is in milliseconds, convert to microseconds
+    uint64_t corrected_sleep_ms = (uint64_t)(DEEP_SLEEP_CYCLE_MS * SLEEP_ADJ);
+    applog("Next wakeup in %lu minutes (corrected, adj=%.3f)", DEEP_SLEEP_CYCLE_MINUTES, SLEEP_ADJ);
+    esp_sleep_enable_timer_wakeup(corrected_sleep_ms * 1000);
   }
 
   esp_deep_sleep_start();

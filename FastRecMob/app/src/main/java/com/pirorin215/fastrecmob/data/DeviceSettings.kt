@@ -2,6 +2,7 @@ package com.pirorin215.fastrecmob.data
 
 data class DeviceSettings(
     val deepSleepDelayMs: String = "",
+    val sleepAdj: String = "",
     val batVolMin: String = "",
     val batVolMult: String = "",
     val i2sSampleRate: String = "",
@@ -21,6 +22,7 @@ data class DeviceSettings(
     fun toIniString(): String {
         return """
             DEEP_SLEEP_DELAY_MS=$deepSleepDelayMs
+            SLEEP_ADJ=$sleepAdj
             BAT_VOL_MIN=$batVolMin
             BAT_VOL_MULT=$batVolMult
             I2S_SAMPLE_RATE=$i2sSampleRate
@@ -42,6 +44,7 @@ data class DeviceSettings(
     fun diff(other: DeviceSettings): String {
         val differences = mutableListOf<String>()
         if (deepSleepDelayMs != other.deepSleepDelayMs) differences.add("DEEP_SLEEP_DELAY_MS: '${other.deepSleepDelayMs}' -> '$deepSleepDelayMs'")
+        if (sleepAdj != other.sleepAdj) differences.add("SLEEP_ADJ: '${other.sleepAdj}' -> '$sleepAdj'")
         if (batVolMin != other.batVolMin) differences.add("BAT_VOL_MIN: '${other.batVolMin}' -> '$batVolMin'")
         if (batVolMult != other.batVolMult) differences.add("BAT_VOL_MULT: '${other.batVolMult}' -> '$batVolMult'")
         if (i2sSampleRate != other.i2sSampleRate) differences.add("I2S_SAMPLE_RATE: '${other.i2sSampleRate}' -> '$i2sSampleRate'")
@@ -66,6 +69,7 @@ data class DeviceSettings(
 
             return DeviceSettings(
                 deepSleepDelayMs = properties["DEEP_SLEEP_DELAY_MS"] ?: "",
+                sleepAdj = properties["SLEEP_ADJ"] ?: "",
                 batVolMin = properties["BAT_VOL_MIN"] ?: "",
                 batVolMult = properties["BAT_VOL_MULT"] ?: "",
                 i2sSampleRate = properties["I2S_SAMPLE_RATE"] ?: "",

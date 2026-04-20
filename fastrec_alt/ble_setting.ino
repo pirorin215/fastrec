@@ -463,6 +463,9 @@ bool createDefaultSettingIni() {
   file.printf("DEEP_SLEEP_DELAY_MS=%lu\n", DEEP_SLEEP_DELAY_MS);
   file.printf("DEEP_SLEEP_CYCLE_MINUTES=%lu\n", DEEP_SLEEP_CYCLE_MINUTES);
   file.println("");
+  file.println("# Sleep Settings");
+  file.printf("SLEEP_ADJ=%.3f\n", SLEEP_ADJ);
+  file.println("");
   file.println("# Battery Settings");
   file.printf("BAT_VOL_MIN=%.1f\n", BAT_VOL_MIN);
   file.printf("BAT_VOL_MULT=%.1f\n", BAT_VOL_MULT);
@@ -821,6 +824,9 @@ bool loadSettingsFromLittleFS() {
       DEEP_SLEEP_CYCLE_MINUTES = atol(value);
       DEEP_SLEEP_CYCLE_MS = DEEP_SLEEP_CYCLE_MINUTES * 60 * 1000;
       applog("Setting DEEP_SLEEP_CYCLE_MINUTES to %lu (which is %lu ms)", DEEP_SLEEP_CYCLE_MINUTES, DEEP_SLEEP_CYCLE_MS);
+    } else if (strcmp(key, "SLEEP_ADJ") == 0) {
+      SLEEP_ADJ = atof(value);
+      applog("Setting SLEEP_ADJ to %f", SLEEP_ADJ);
     } else if (strcmp(key, "USE_ADPCM") == 0) {
       USE_ADPCM = (strcmp(value, "true") == 0);
       applog("Setting USE_ADPCM to %s", USE_ADPCM ? "true" : "false");

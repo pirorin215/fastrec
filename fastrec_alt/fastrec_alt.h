@@ -35,6 +35,7 @@ unsigned long DEEP_SLEEP_CYCLE_MINUTES = 60; // Default 60 minutes
 unsigned long DEEP_SLEEP_CYCLE_MS = DEEP_SLEEP_CYCLE_MINUTES * 60 * 1000; // Calculated from minutes
 float BAT_VOL_MIN = 3.0f;
 float BAT_VOL_MULT = 2.1f;
+float SLEEP_ADJ = 1.033f;  // Sleep adjustment for internal RTC drift correction (default: 62/60)
 
 // Audio/Recording
 int REC_MAX_S = 20;
