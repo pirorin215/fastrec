@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.pirorin215.fastrecmob.data.DeviceHistoryRepository
 import com.pirorin215.fastrecmob.data.DeviceHistoryEntry
+import com.pirorin215.fastrecmob.service.GeocoderService
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,7 +21,8 @@ import java.util.Calendar
 import java.util.TimeZone
 
 class DeviceHistoryViewModel(
-    private val deviceHistoryRepository: DeviceHistoryRepository
+    private val deviceHistoryRepository: DeviceHistoryRepository,
+    private val geocoderService: GeocoderService
 ) : ViewModel() {
 
     val deviceHistoryEntries: StateFlow<List<DeviceHistoryEntry>> =
@@ -62,6 +64,30 @@ class DeviceHistoryViewModel(
         viewModelScope.launch {
             val twoWeeksMs = 14L * 24 * 60 * 60 * 1000
             deviceHistoryRepository.deleteOldEntries(twoWeeksMs)
+        }
+
+        // 起動時に未取得データのバックグラウンド補完を開始
+        startBackfillAddresses()
+    }
+
+    /**
+     * 住所が未取得のエントリに対してバックグラウンドで住所を取得する
+     */
+    private fun startBackfillAddresses() {
+        viewModelScope.launch {
+            val entriesWithoutAddress = deviceHistoryRepository.getEntriesWithoutAddress()
+
+            // 一度に処理するエントリ数を制限してサーバーに負荷をかけないようにする
+            entriesWithoutAddress.forEach { entry ->
+                entry.latitude?.let { lat ->
+                    entry.longitude?.let { lon ->
+                        val address = geocoderService.getAddressFromLocation(lat, lon)
+                        deviceHistoryRepository.updateAddress(entry.timestamp, address)
+                        // 少し待機してから次の処理へ（レート制限対策）
+                        kotlinx.coroutines.delay(1000)
+                    }
+                }
+            }
         }
     }
 
@@ -265,11 +291,24 @@ class DeviceHistoryViewModel(
         }
     }
 
-    class Factory(private val deviceHistoryRepository: DeviceHistoryRepository) : ViewModelProvider.Factory {
+    /**
+     * エントリを追加する（住所は自動的に非同期取得される）
+     * @param entry 追加するエントリ
+     */
+    fun addEntry(entry: DeviceHistoryEntry) {
+        viewModelScope.launch {
+            deviceHistoryRepository.addEntry(entry)
+        }
+    }
+
+    class Factory(
+        private val deviceHistoryRepository: DeviceHistoryRepository,
+        private val geocoderService: GeocoderService
+    ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(DeviceHistoryViewModel::class.java)) {
-                return DeviceHistoryViewModel(deviceHistoryRepository) as T
+                return DeviceHistoryViewModel(deviceHistoryRepository, geocoderService) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

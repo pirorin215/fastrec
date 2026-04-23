@@ -50,5 +50,5 @@ val viewModelModule = module {
 
     viewModel { BleViewModel(get<BleConnectionManager>(), get<BleOrchestrator>(), get<BleSelectionManager>()) }
 
-    viewModel { DeviceHistoryViewModel(get()) }
+    viewModel { DeviceHistoryViewModel(get(), get()) }
 }

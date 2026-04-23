@@ -9,5 +9,6 @@ data class DeviceHistoryEntry(
     val longitude: Double?,
     val batteryLevel: Float?,
     val batteryVoltage: Float?,
-    val isInterpolated: Boolean = false
+    val isInterpolated: Boolean = false,
+    val address: String? = null
 )

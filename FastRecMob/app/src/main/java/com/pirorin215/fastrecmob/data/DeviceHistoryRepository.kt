@@ -8,15 +8,20 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import com.pirorin215.fastrecmob.constants.TimeConstants
 import com.pirorin215.fastrecmob.constants.LocationConstants
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
+import kotlinx.coroutines.launch
+import com.pirorin215.fastrecmob.service.GeocoderService
 
 private val Context.deviceHistoryDataStore: DataStore<Preferences> by preferencesDataStore(name = "device_history")
 
-class DeviceHistoryRepository(private val context: Context) {
+class DeviceHistoryRepository(
+    private val context: Context,
+    private val geocoderService: GeocoderService? = null
+) {
 
     private object PreferencesKeys {
         val DEVICE_HISTORY_LIST = stringPreferencesKey("device_history_list")
@@ -69,6 +74,17 @@ class DeviceHistoryRepository(private val context: Context) {
             // Add new entry to the beginning of the list
             currentList.add(0, entry)
         }
+
+        // 緯度経度がある場合、非同期で住所も取得
+        if (geocoderService != null && entry.latitude != null && entry.longitude != null) {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                val address = geocoderService.getAddressFromLocation(
+                    entry.latitude,
+                    entry.longitude
+                )
+                updateAddress(entry.timestamp, address)
+            }
+        }
     }
 
     suspend fun clearAllEntries() {
@@ -101,5 +117,38 @@ class DeviceHistoryRepository(private val context: Context) {
             currentList.clear()
             currentList.addAll(filteredList)
         }
+    }
+
+    /**
+     * 指定したタイムスタンプのエントリの住所を更新する
+     * @param timestamp エントリのタイムスタンプ
+     * @param address 住所文字列
+     */
+    suspend fun updateAddress(timestamp: Long, address: String?) {
+        updateListInDataStore<DeviceHistoryEntry>(
+            context.deviceHistoryDataStore,
+            PreferencesKeys.DEVICE_HISTORY_LIST
+        ) { currentList ->
+            val index = currentList.indexOfFirst { it.timestamp == timestamp }
+            if (index != -1) {
+                currentList[index] = currentList[index].copy(address = address)
+            }
+        }
+    }
+
+    /**
+     * 住所が未取得のエントリを取得する
+     * @return 住所がnullで、緯度経度が存在するエントリのリスト
+     */
+    suspend fun getEntriesWithoutAddress(): List<DeviceHistoryEntry> {
+        return context.deviceHistoryDataStore.data.first()[PreferencesKeys.DEVICE_HISTORY_LIST]?.let { jsonString ->
+            try {
+                JsonUtil.json.decodeFromString<List<DeviceHistoryEntry>>(jsonString)
+                    .filter { it.address == null && it.latitude != null && it.longitude != null }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                emptyList()
+            }
+        } ?: emptyList()
     }
 }

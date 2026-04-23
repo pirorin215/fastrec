@@ -6,6 +6,7 @@ import com.pirorin215.fastrecmob.data.BleRepository
 import com.pirorin215.fastrecmob.data.DeviceHistoryRepository
 import com.pirorin215.fastrecmob.data.LastKnownLocationRepository
 import com.pirorin215.fastrecmob.data.TranscriptionResultRepository
+import com.pirorin215.fastrecmob.service.GeocoderService
 import org.koin.dsl.module
 
 val repositoryModule = module {
@@ -13,5 +14,6 @@ val repositoryModule = module {
     single { BleRepository(get<Context>()) }
     single { TranscriptionResultRepository(get<Context>()) }
     single { LastKnownLocationRepository(get<Context>()) }
-    single { DeviceHistoryRepository(get<Context>()) }
+    single { GeocoderService(get<Context>()) }
+    single { DeviceHistoryRepository(get<Context>(), get()) }
 }
