@@ -35,7 +35,7 @@ const size_t NUM_VALID_TRANSITIONS = sizeof(validTransitions) / sizeof(validTran
 int g_serviceDisplayMode = 0;  // 0: 1234, 1: 1234, 2-8: 曜日記号確認 (日-土)
 const int NUM_SERVICE_MODES = 10;
 
-void setAppState(AppState newState, bool applyDebounce=true) {
+void setAppState(AppState newState, bool applyDebounce=true, bool resetWakeupTime=true) {
   static unsigned long lastStateChangeTime = 0; // 状態変更のデバウンス用
 
   if (g_currentAppState != newState) {
@@ -69,6 +69,10 @@ void setAppState(AppState newState, bool applyDebounce=true) {
     applog("App State changed from %s to %s", appStateStrings[g_currentAppState], appStateStrings[newState]);
     g_currentAppState = newState;
     g_lastActivityTime = millis();  // Reset activity timer
+    g_retryCount = 0;              // Reset retry count
+    if (resetWakeupTime) {
+      g_nextWakeupTime = 0;        // Reset wakeup time override
+    }
     lastStateChangeTime = millis(); // 状態変更時刻を更新
   }
 }
@@ -116,8 +120,48 @@ void goDeepSleep() {
   gpio_reset_pin(I2S_DOUT_PIN);
   gpio_reset_pin(I2S_LRCK_PIN);
 
-  // DEEP_SLEEP_CYCLE_MINUTESの値で動作を切り替え
-  if (DEEP_SLEEP_CYCLE_MINUTES == 0) {
+  // g_nextWakeupTime が設定されている場合は、指定時刻に復帰
+  if (g_nextWakeupTime > 0) {
+    time_t now;
+    time(&now);
+    int seconds_until_wakeup = g_nextWakeupTime - now;
+
+    if (seconds_until_wakeup > 0) {
+      // スリープ時間補正（内蔵RTCドリフト対策）
+      int corrected_seconds = (int)(seconds_until_wakeup * SLEEP_ADJ);
+      uint64_t sleep_time_us = (uint64_t)corrected_seconds * 1000000ULL;
+
+      struct tm timeinfo;
+      localtime_r(&g_nextWakeupTime, &timeinfo);
+      applog("Next wakeup at %02d:%02d:%02d (in %d seconds, corrected from %d seconds, adj=%.3f)",
+             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+             corrected_seconds, seconds_until_wakeup, SLEEP_ADJ);
+      esp_sleep_enable_timer_wakeup(sleep_time_us);
+    } else {
+      // 指定時刻が過去の場合、即座に復帰
+      applog("Wakeup time is in the past. Resetting to normal cycle.");
+      g_nextWakeupTime = 0;
+      // 通常のスリープサイクルへ
+      if (DEEP_SLEEP_CYCLE_MINUTES == 0) {
+        time_t now;
+        struct tm timeinfo;
+        time(&now);
+        localtime_r(&now, &timeinfo);
+        int minutes_until_next_hour = 59 - timeinfo.tm_min;
+        int seconds_until_next_hour = 60 - timeinfo.tm_sec;
+        int total_seconds = (minutes_until_next_hour * 60) + seconds_until_next_hour;
+        int corrected_seconds = (int)(total_seconds * SLEEP_ADJ);
+        uint64_t sleep_time_us = (uint64_t)corrected_seconds * 1000000ULL;
+        applog("Next wakeup in %d seconds (corrected from %d seconds, adj=%.3f) at %02d:00",
+               corrected_seconds, total_seconds, SLEEP_ADJ, (timeinfo.tm_hour + 1) % 24);
+        esp_sleep_enable_timer_wakeup(sleep_time_us);
+      } else {
+        uint64_t corrected_sleep_ms = (uint64_t)(DEEP_SLEEP_CYCLE_MS * SLEEP_ADJ);
+        applog("Next wakeup in %lu minutes (corrected, adj=%.3f)", DEEP_SLEEP_CYCLE_MINUTES, SLEEP_ADJ);
+        esp_sleep_enable_timer_wakeup(corrected_sleep_ms * 1000);
+      }
+    }
+  } else if (DEEP_SLEEP_CYCLE_MINUTES == 0) {
     // 毎正時に復帰するモード
     time_t now;
     struct tm timeinfo;
@@ -410,8 +454,35 @@ void handleIdle() {
   }
 
   // Go to deep sleep if idle for a while
-  if (millis() - g_lastActivityTime > DEEP_SLEEP_DELAY_MS) {
-    setAppState(DSLEEP, false);
+  // g_retryCount == 0: 最初のタイムアウト (15秒)
+  // g_retryCount >= 1: 延長タイムアウト (45秒)
+  unsigned long currentTimeout = (g_retryCount > 0) ?
+      (DEEP_SLEEP_DELAY_MS + 30000) : DEEP_SLEEP_DELAY_MS;
+
+  if (millis() - g_lastActivityTime > currentTimeout) {
+    if (g_start_file_transfer) {
+      // 転送中はスリープに入らない。タイマーを延長し続ける。
+      g_lastActivityTime = millis();
+    } else if (g_audioFileCount > 0 && g_retryCount < 4) {
+      // ファイルが残っている場合のリトライ処理
+      if (g_retryCount == 0) {
+        applog("Files remain. Extending sleep by 30s.");
+        g_retryCount++;
+      } else {
+        // 1分後に復帰する時刻を設定
+        time_t now;
+        time(&now);
+        g_nextWakeupTime = now + 60;
+        applog("Files still remain. Going to sleep for retry (count: %d), wakeup at 1min later", g_retryCount + 1);
+        g_retryCount++;
+        setAppState(DSLEEP, false, false);  // g_nextWakeupTime をリセットしない
+      }
+    } else {
+      // スリープ処理
+      g_retryCount = 0;
+      g_nextWakeupTime = 0;
+      setAppState(DSLEEP, false);
+    }
   }
 
   // Battery voltage tracking and BLE file transfer are only needed in IDLE state
@@ -465,8 +536,35 @@ void handleSetup() {
   }
 
   // If in SETUP state, not connected via BLE, and inactive, go to deep sleep
-  if ((millis() - g_lastActivityTime > DEEP_SLEEP_DELAY_MS) && (!isBLEConnected() || g_audioFileCount == 0)) {
-    setAppState(DSLEEP, false);
+  // 転送中(g_start_file_transfer)はスリープに入らない
+  // g_retryCount == 0: 最初のタイムアウト (15秒)
+  // g_retryCount >= 1: 延長タイムアウト (45秒)
+  unsigned long currentTimeout = (g_retryCount > 0) ?
+      (DEEP_SLEEP_DELAY_MS + 30000) : DEEP_SLEEP_DELAY_MS;
+
+  if ((millis() - g_lastActivityTime > currentTimeout) && (!isBLEConnected() || g_audioFileCount == 0)) {
+    if (g_start_file_transfer) {
+      g_lastActivityTime = millis();
+    } else if (g_audioFileCount > 0 && g_retryCount < 4) {
+      // ファイルが残っている場合のリトライ処理
+      if (g_retryCount == 0) {
+        applog("Files remain in SETUP. Extending sleep by 30s.");
+        g_retryCount++;
+      } else {
+        // 1分後に復帰する時刻を設定
+        time_t now;
+        time(&now);
+        g_nextWakeupTime = now + 60;
+        applog("Files still remain in SETUP. Going to sleep for retry (count: %d), wakeup at 1min later", g_retryCount + 1);
+        g_retryCount++;
+        setAppState(DSLEEP, false, false);  // g_nextWakeupTime をリセットしない
+      }
+    } else {
+      // スリープ処理（IDLEと同様のロジック）
+      g_retryCount = 0;
+      g_nextWakeupTime = 0;
+      setAppState(DSLEEP, false);
+    }
   }
 }
 
@@ -518,6 +616,15 @@ void wakeupLogic() {
   applog("Wakeup was caused by: %d", wakeup_reason);
 
   g_enable_logging = true;
+
+  // タイマー復帰以外（ボタン押し、電源ON）の場合はリトライカウントとウェイクアップ時刻をリセット
+  if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER) {
+    g_retryCount = 0;
+    g_nextWakeupTime = 0;
+  } else {
+    // タイマー復帰の場合、ウェイクアップ時刻をリセット
+    g_nextWakeupTime = 0;
+  }
 
   switch (wakeup_reason) {
     case ESP_SLEEP_WAKEUP_EXT1: {

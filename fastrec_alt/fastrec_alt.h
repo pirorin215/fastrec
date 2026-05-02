@@ -192,6 +192,10 @@ std::string g_file_to_transfer_name;
 int g_chunk_burst_size = 8;
 std::string g_lastBleCommand;
 
+// Sleep and Retry Logic
+RTC_DATA_ATTR int g_retryCount;
+RTC_DATA_ATTR time_t g_nextWakeupTime = 0;  // 0以外の場合は指定時刻に復帰
+
 // Function Prototypes ---
 bool createDefaultSettingIni();
 

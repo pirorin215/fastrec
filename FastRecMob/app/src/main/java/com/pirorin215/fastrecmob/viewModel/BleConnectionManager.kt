@@ -4,7 +4,10 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.pirorin215.fastrecmob.BleScanServiceManager
@@ -42,6 +45,34 @@ class BleConnectionManager(
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
 
+    // Bluetooth状態変化を監視するBroadcastReceiver
+    private val bluetoothStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                when (state) {
+                    BluetoothAdapter.STATE_OFF -> {
+                        logManager.addDebugLog("Bluetooth turned OFF - disconnecting and cleaning up")
+                        // 接続状態を強制的に切断状態に設定
+                        scope.launch {
+                            disconnect()
+                            repository.close()
+                            _connectionStateFlow.value = ConnectionState.Disconnected
+                        }
+                    }
+                    BluetoothAdapter.STATE_ON -> {
+                        logManager.addDebugLog("Bluetooth turned ON - attempting reconnection")
+                        // Bluetooth ON時に再接続を試みる
+                        scope.launch {
+                            delay(1000L) // Bluetoothが完全に有効になるのを待つ
+                            restartScan(forceScan = true)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // The internal _connectionState is removed, as we update the external _connectionStateFlow
     // private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     // val connectionState = _connectionState.asStateFlow() // No longer exposed
@@ -50,6 +81,10 @@ class BleConnectionManager(
         // Initialize connection state to Disconnected to ensure clean state on app start
         _connectionStateFlow.value = ConnectionState.Disconnected
         logManager.addDebugLog("BleConnectionManager: Initialized with state=Disconnected")
+
+        // Bluetooth状態変化を監視するBroadcastReceiverを登録
+        val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+        context.registerReceiver(bluetoothStateReceiver, filter)
 
         // Collect connection state from the repository
         repository.connectionState.onEach { state ->
@@ -123,6 +158,14 @@ class BleConnectionManager(
                 }
             }.launchIn(this)
         }
+
+        // Start initial BLE scan after a short delay to ensure BleScanService is ready
+        // This fixes the issue where BLE auto-connection doesn't work on app startup
+        scope.launch {
+            delay(2000L) // Wait 2 seconds for BleScanService to be fully initialized
+            logManager.addDebugLog("Starting initial BLE scan...")
+            restartScan()
+        }
     }
 
     fun startScan() {
@@ -174,6 +217,12 @@ class BleConnectionManager(
 
     fun close() {
         repository.close()
+        // BroadcastReceiverの登録解除
+        try {
+            context.unregisterReceiver(bluetoothStateReceiver)
+        } catch (e: IllegalArgumentException) {
+            logManager.addDebugLog("BluetoothStateReceiver was not registered")
+        }
         logManager.addDebugLog("Connection manager closed")
     }
 }
