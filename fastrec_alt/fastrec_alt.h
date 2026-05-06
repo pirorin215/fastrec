@@ -236,8 +236,10 @@ struct HidSwitch {
 // HID Global Variables
 extern HidSwitch hidSwitches[3];  // 3 HID switches: VolUp, VolDn, RightArrow
 extern bool g_hidInitialized;
-extern bool g_firstHidSend;  // 初回HID送信フラグ（振動フィードバック用）
 extern bool g_hidWakeupMode;  // HID起動中はBLE処理を延期（HID操作を優先）
+
+// Wakeup Mode Detection
+extern bool g_isTimerWakeup;  // タイマー起動かどうか（true: タイマー, false: ボタン）
 extern bool g_displayingKeyCode;   // Currently displaying HID key code
 extern uint16_t g_displayingKeyCodeValue;  // Currently displaying HID key code value
 extern unsigned long g_keyCodeDisplayEndTime;  // When to stop displaying key code

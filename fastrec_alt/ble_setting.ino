@@ -587,6 +587,17 @@ class MyCallbacks : public NimBLECharacteristicCallbacks {
         return;
       }
 
+      // ボタン起動でファイルがない場合はBLEコマンドを拒否（タイマー起動は常に許可）
+      extern bool g_isTimerWakeup;
+      extern int g_audioFileCount;
+      if (!g_isTimerWakeup && g_audioFileCount == 0) {
+        std::string noFileMessage = "ERROR: No audio files. Button wakeup - BLE commands disabled.";
+        pResponseCharacteristic->setValue(noFileMessage.c_str());
+        pResponseCharacteristic->notify();
+        applog(noFileMessage.c_str());
+        return;
+      }
+
       // SETUP状態でも設定関係のコマンドは許可する
       if (g_currentAppState != IDLE && g_currentAppState != SETUP) {
         std::string busyMessage = "ERROR: Device is busy (State: " + std::string(appStateStrings[g_currentAppState]) + "). Command rejected.";

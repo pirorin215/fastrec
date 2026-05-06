@@ -229,16 +229,6 @@ void sendHidKeyPress(uint16_t keyCode) {
         return;
     }
 
-    // 初回HID送信時に振動フィードバック（ユーザーにキー送信を通知）
-    // 振動が終わったあとにキー送信する
-    extern bool g_firstHidSend;
-    extern void startVibrationSync(unsigned long duration_ms);
-    if (g_firstHidSend) {
-        g_firstHidSend = false;
-        startVibrationSync(100);  // 100ms振動
-        applog("First HID send: vibration feedback");
-    }
-
     // Keyboard Page keys (0x00-0xFF) vs Consumer Page keys (0xE0-0xFF, etc.)
     if (keyCode < 0xE0 || keyCode == 0x4F) {
         // Keyboard Page (Report ID 2) - Standard 6KRO keyboard format

@@ -11,6 +11,8 @@ import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 
 @Serializable
 data class LocationData(
@@ -81,10 +83,13 @@ class LocationTracker(private val context: Context) {
 
         val cancellationTokenSource = CancellationTokenSource()
         return try {
-            val location = fusedLocationClient.getCurrentLocation(
-                com.google.android.gms.location.Priority.PRIORITY_LOW_POWER,
-                cancellationTokenSource.token
-            ).await()
+            // Add 3 second timeout to prevent blocking transcription
+            val location = withTimeout(3000L) {
+                fusedLocationClient.getCurrentLocation(
+                    com.google.android.gms.location.Priority.PRIORITY_LOW_POWER,
+                    cancellationTokenSource.token
+                ).await()
+            }
 
             if (location != null) {
                 Result.success(LocationData(
@@ -95,6 +100,9 @@ class LocationTracker(private val context: Context) {
             } else {
                 Result.failure(Exception("Failed to get low power location: FusedLocationProviderClient returned null."))
             }
+        } catch (e: TimeoutCancellationException) {
+            Log.w(TAG, "Low power location timed out after 3 seconds")
+            Result.failure(Exception("Location request timed out"))
         } catch (e: Exception) {
             Log.e(TAG, "Low power location error: ${e.message}", e)
             Result.failure(e)

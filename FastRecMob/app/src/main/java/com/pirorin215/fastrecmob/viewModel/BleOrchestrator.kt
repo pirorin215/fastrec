@@ -159,6 +159,12 @@ class BleOrchestrator(
     // This is safer than Mutex as it avoids potential deadlock with bleMutex
     private val isProcessingFiles = AtomicBoolean(false)
 
+    // Track the file being transferred when disconnected, to retry after reconnection
+    private var interruptedFileName: String? = null
+
+    // Job to track the high-level file processing sequence (sync, download, etc.)
+    private var fileProcessingJob: Job? = null
+
     // Retry job for file list fetch when device is busy (recording)
     private var fileListRetryJob: Job? = null
 
@@ -167,6 +173,19 @@ class BleOrchestrator(
         disconnectSignal
             .onEach {
                 addDebugLog("BLE disconnected, canceling file list retry")
+
+                // Save the interrupted file name for retry after reconnection
+                if (isProcessingFiles.get()) {
+                    addDebugLog("File processing was interrupted, saving state for retry")
+                    // Get the current file being processed from fileTransferManager if available
+                    interruptedFileName = fileTransferManager.getCurrentDownloadingFileName()
+                }
+
+                // Reset the processing flag to allow retry after reconnection
+                isProcessingFiles.set(false)
+
+                fileProcessingJob?.cancel()
+                fileProcessingJob = null
                 fileListRetryJob?.cancel()
                 fileListRetryJob = null
             }
@@ -174,8 +193,19 @@ class BleOrchestrator(
 
         onDeviceReadyEvent
             .onEach {
-                addLog("Starting initial sync")
-                startFullSync()
+                // Check if this is a reconnection after an interrupted transfer
+                if (interruptedFileName != null) {
+                    addLog("Reconnection detected, retrying interrupted file transfer")
+                    interruptedFileName = null
+
+                    // Simply start full sync, which will pick up the interrupted file
+                    // This avoids duplicate download calls and competing coroutines
+                    startFullSync()
+                } else {
+                    // Initial connection or normal reconnection
+                    addLog("Starting initial sync")
+                    startFullSync()
+                }
             }
             .launchIn(scope)
 
@@ -210,7 +240,7 @@ class BleOrchestrator(
     }
 
     private fun startFullSync() {
-        scope.launch {
+        fileProcessingJob = scope.launch {
             addLog("ファイルリストを取得中")
             val success = bleDeviceManager.fetchFileList(connectionStateFlow.value)
 
@@ -264,7 +294,7 @@ class BleOrchestrator(
     }
 
     private fun performPostTransferSync() {
-        scope.launch {
+        fileProcessingJob = scope.launch {
             addDebugLog("転送後同期処理...")
 
             // ファイルリストを再取得してUIを最新にする（新しい処理ループはトリガーしない）
@@ -292,7 +322,7 @@ class BleOrchestrator(
     }
 
     private fun checkForNewWavFilesAndProcess() {
-        scope.launch {
+        fileProcessingJob = scope.launch {
             // 並行実行を防ぐためAtomicBooleanを使用
             // 内部操作で使用されるbleMutexとのデッドロックリスクを回避
             if (!isProcessingFiles.compareAndSet(false, true)) {
@@ -335,13 +365,30 @@ class BleOrchestrator(
                 for (fileEntry in filesToDownload) {
                     addDebugLog("処理中: ${fileEntry.name}")
 
-                    val downloadSuccess = fileTransferManager.downloadFile(fileEntry.name)
+                    // デバイスが録音中の場合、転送が中止されることがある
+                    // 短い間隔でリトライして、録音終了後に迅速に転送を再開する
+                    var downloadSuccess = false
+                    var retryCount = 0
+                    val maxRetries = 3  // 最大3回リトライ
+                    val retryDelayMs = 3000L  // 3秒待機
+
+                    while (!downloadSuccess && retryCount < maxRetries) {
+                        downloadSuccess = fileTransferManager.downloadFile(fileEntry.name)
+
+                        if (!downloadSuccess) {
+                            retryCount++
+                            if (retryCount < maxRetries) {
+                                addLog("ダウンロード失敗（デバイスが録音中の可能性があります）。${retryDelayMs / 1000}秒後にリトライします ($retryCount/$maxRetries)")
+                                delay(retryDelayMs)
+                            } else {
+                                addLog("ダウンロード失敗（最大リトライ回数到達）: ${fileEntry.name}", LogLevel.ERROR)
+                            }
+                        }
+                    }
 
                     if (downloadSuccess) {
                         addDebugLog("ダウンロード成功、デバイスから削除中")
                         fileTransferManager.deleteFileAndUpdateList(fileEntry.name)
-                    } else {
-                        addLog("ダウンロード失敗: ${fileEntry.name}", LogLevel.ERROR)
                     }
                 }
 

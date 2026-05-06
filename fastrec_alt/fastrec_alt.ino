@@ -40,11 +40,10 @@ bool g_displayingKeyCode = false;  // Currently displaying HID key code
 uint16_t g_displayingKeyCodeValue = 0;  // Currently displaying HID key code value
 unsigned long g_keyCodeDisplayEndTime = 0;  // When to stop displaying key code
 
-// HID first send flag for vibration feedback
-bool g_firstHidSend = true;  // 初回HID送信フラグ（振動フィードバック用）
-
 // HID wakeup priority mode flag
 bool g_hidWakeupMode = false;  // HID起動中はBLE処理を延期（HID操作を優先）
+
+bool g_isTimerWakeup = false;  // タイマー起動かどうか（true: タイマー, false: ボタン）
 
 void setAppState(AppState newState, bool applyDebounce=true, bool resetWakeupTime=true) {
   static unsigned long lastStateChangeTime = 0; // 状態変更のデバウンス用
@@ -649,6 +648,9 @@ void wakeupLogic() {
 
   g_enable_logging = true;
 
+  // 起動方法を記録（タイマーかボタンか）
+  g_isTimerWakeup = (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER);
+
   // タイマー復帰以外（ボタン押し、電源ON）の場合はリトライカウントとウェイクアップ時刻をリセット
   if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER) {
     g_retryCount = 0;
@@ -713,8 +715,6 @@ void wakeupLogic() {
     sendHidKeyRelease(hidSwitches[i].keyCode);
   }
   applog("HID switch states reset after wakeup");
-  // 初回HID送信フラグをリセット
-  g_firstHidSend = true;
 #endif
 }
 
