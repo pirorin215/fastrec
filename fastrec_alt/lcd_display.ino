@@ -125,6 +125,13 @@ void displayTopRow() {
     offset += snprintf(line1 + offset, sizeof(line1) - offset, "%s", appStateToDisplay);
   }
 
+#ifndef USE_HID_FOR_AI_BUTTON
+  // Show AI mode indicator if enabled and in REC state
+  if (g_currentAppState == REC && g_is_ai_recording && offset < sizeof(line1) - 4) {
+    offset += snprintf(line1 + offset, sizeof(line1) - offset, " AI:");
+  }
+#endif
+
   // Append '*' if audio files exist
   if (countAudioFiles() > 0 && offset < sizeof(line1) - 1) {
     snprintf(line1 + offset, sizeof(line1) - offset, "*");

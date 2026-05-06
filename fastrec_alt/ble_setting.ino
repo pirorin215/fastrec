@@ -38,11 +38,6 @@ void transferFileChunked() {
     return;
   }
 
-  // HID起動モード中はBLE処理を延期（HID操作を優先）
-  if (g_hidWakeupMode) {
-    return;  // 何もせずに戻る（BLE処理を延期）
-  }
-
   // Abort if recording button is pressed before starting
   if (digitalRead(REC_BUTTON_GPIO) == HIGH) {
     applog("Recording button pressed. Aborting file transfer before start.");
@@ -429,11 +424,15 @@ static std::string handle_set_time(const std::string& value) {
   std::string timestamp_str = value.substr(std::string("SET:time:").length());
   if (!timestamp_str.empty()) {
     long long timestamp_ll = atoll(timestamp_str.c_str());
-    if (timestamp_ll > MIN_VALID_TIMESTAMP) {  // Basic validation (after 2024-01-01)
+    // 2000年以降であることを簡易チェック
+    if (timestamp_ll >= 946684800) {  // 2000-01-01 00:00:00 UTC
       struct timeval tv;
-      tv.tv_sec = (time_t)timestamp_ll;  // atollからtime_tへのキャストを明確化
+      tv.tv_sec = (time_t)timestamp_ll;
       tv.tv_usec = 0;
       settimeofday(&tv, NULL);
+
+      // 時刻同期完了フラグを設定
+      g_timeInitialized = true;
 
       time_t now;
       struct tm timeinfo;
@@ -577,20 +576,11 @@ class MyCallbacks : public NimBLECharacteristicCallbacks {
       g_lastBleCommand = value; // Store the last received command
       g_lastActivityTime = millis();  // コマンド受信もアクティビティ
 
-      // HID起動モード中はBLEコマンド処理を延期（HID操作を優先）
-      // ACK処理とファイル転送以外のすべてのコマンドを延期
-      if (g_hidWakeupMode) {
-        std::string deferMessage = "DEFER: HID wakeup mode - Command deferred";
-        pResponseCharacteristic->setValue(deferMessage.c_str());
-        pResponseCharacteristic->notify();
-        applog(deferMessage.c_str());
-        return;
-      }
-
       // ボタン起動でファイルがない場合はBLEコマンドを拒否（タイマー起動は常に許可）
+      // ただし、時刻未同期の場合は拒否しない（時刻同期させるため）
       extern bool g_isTimerWakeup;
       extern int g_audioFileCount;
-      if (!g_isTimerWakeup && g_audioFileCount == 0) {
+      if (!g_isTimerWakeup && g_audioFileCount == 0 && g_timeInitialized) {
         std::string noFileMessage = "ERROR: No audio files. Button wakeup - BLE commands disabled.";
         pResponseCharacteristic->setValue(noFileMessage.c_str());
         pResponseCharacteristic->notify();
@@ -738,13 +728,11 @@ void start_ble_server() {
   // Add custom service UUID to advertising
   pAdvertising->addServiceUUID(SERVICE_UUID);
 
-#ifdef HID_ENABLED
   // Add HID service UUID to advertising
   // HID service UUID is 0x1812
   pAdvertising->addServiceUUID(NimBLEUUID("1812"));
   // Set appearance to HID Keyboard (0x03C1)
   pAdvertising->setAppearance(0x03C1);
-#endif
 
   pAdvertising->enableScanResponse(true);      // Enable scan response
 }

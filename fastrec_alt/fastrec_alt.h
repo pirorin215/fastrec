@@ -16,9 +16,13 @@
 #define AI_BUTTON_GPIO     GPIO_NUM_2
 
 #define MOTOR_GPIO         GPIO_NUM_3
-#define HID_VOL_UP_GPIO    GPIO_NUM_4  // Volume Up (HID 0xE9)
+#define HID_KEY1_GPIO      GPIO_NUM_4
 #define BATTERY_DIV_PIN    GPIO_NUM_5
-#define HID_VOL_DN_GPIO    GPIO_NUM_6  // Volume Down (HID 0xEA)
+#define HID_KEY2_GPIO      GPIO_NUM_6
+#define HID_KEY3_GPIO      GPIO_NUM_39
+#define HID_KEY4_GPIO      GPIO_NUM_40
+#define HID_KEY5_GPIO      GPIO_NUM_41
+#define HID_KEY6_GPIO      GPIO_NUM_42
 #define I2S_BCLK_PIN       GPIO_NUM_7
 #define I2S_DOUT_PIN       GPIO_NUM_8
 #define I2S_LRCK_PIN       GPIO_NUM_9
@@ -60,7 +64,7 @@ const char* LOG_FILE_1 = "/log.1.txt";
 const unsigned long MAX_LOG_SIZE = 100 * 1024; // 100KB
 
 // Time Validation
-const long long MIN_VALID_TIMESTAMP = 1704067200; // 2024-01-01 00:00:00 UTC
+// 時刻同期の完了は g_timeInitialized フラグで判定する
 
 // Vibration
 unsigned long VIBRA_STARTUP_MS = 500;
@@ -199,24 +203,13 @@ std::string g_lastBleCommand;
 // Sleep and Retry Logic
 RTC_DATA_ATTR int g_retryCount;
 RTC_DATA_ATTR time_t g_nextWakeupTime = 0;  // 0以外の場合は指定時刻に復帰
+RTC_DATA_ATTR bool g_timeInitialized = false;  // 時刻同期が完了したかどうか（setRtcToDefaultTimeではtrueにしない）
 
 // Function Prototypes ---
 bool createDefaultSettingIni();
 
 // --- HID Settings ---
-#define HID_ENABLED  // Enable HID functionality
 #define HID_DEBOUNCE_DELAY_MS  20   // Switch debounce delay
-
-// HID Key Codes (Consumer Page)
-#define HID_VOLUME_UP    0xE9  // Volume Up
-#define HID_VOLUME_DOWN  0xEA  // Volume Down
-#define HID_MUTE         0xE2  // Mute
-#define HID_PLAY_PAUSE   0xCD  // Play/Pause
-#define HID_NEXT_TRACK   0xB6  // Next Track
-#define HID_PREV_TRACK   0xB5  // Previous Track
-
-// HID Key Codes (Keyboard Page)
-#define HID_RIGHT_ARROW  0x4F  // Right Arrow
 
 // HID Switch State
 enum HidSwitchState {
@@ -234,12 +227,13 @@ struct HidSwitch {
 };
 
 // HID Global Variables
-extern HidSwitch hidSwitches[3];  // 3 HID switches: VolUp, VolDn, RightArrow
+extern HidSwitch hidSwitches[];
+extern const int HID_SWITCH_COUNT;  // Automatically calculated from array size
 extern bool g_hidInitialized;
-extern bool g_hidWakeupMode;  // HID起動中はBLE処理を延期（HID操作を優先）
 
 // Wakeup Mode Detection
 extern bool g_isTimerWakeup;  // タイマー起動かどうか（true: タイマー, false: ボタン）
+extern RTC_DATA_ATTR bool g_timeInitialized;  // 時刻同期が完了したかどうか
 extern bool g_displayingKeyCode;   // Currently displaying HID key code
 extern uint16_t g_displayingKeyCodeValue;  // Currently displaying HID key code value
 extern unsigned long g_keyCodeDisplayEndTime;  // When to stop displaying key code

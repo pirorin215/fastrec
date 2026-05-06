@@ -120,8 +120,9 @@ void setRtcToDefaultTime() {
   defaultTime.tm_isdst = -1;          // Daylight Saving Time flag (-1 means unknown)
 
   time_t t = mktime(&defaultTime);
-  struct timeval now = { .tv_sec = t };
-  settimeofday(&now, NULL);
+  struct timeval tv = { .tv_sec = t };
+  settimeofday(&tv, NULL);
+  // 注意: ここでは g_timeInitialized = true にしない（デフォルト時刻設定のみ）
   applog("RTC set to default time.");
 }
 

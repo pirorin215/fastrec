@@ -4,45 +4,23 @@
  * Provides BLE HID keyboard/media key functionality for GPIO switches.
  * Uses NimBLEHIDDevice for ESP32 BLE HID implementation.
  *
- * Switches:
- * - GPIO4 (HID_VOL_UP_GPIO): Volume Up (0xE9)
- * - GPIO6 (HID_VOL_DN_GPIO): Volume Down (0xEA)
  */
 
 #include "fastrec_alt.h"
 
-#ifdef HID_ENABLED
-
 #include "NimBLEHIDDevice.h"
 
-// --- HID Report Map for Consumer Page (Media Keys) + Keyboard Page ---
+// --- HID Report Map for Consumer Page + Generic Desktop Page + Keyboard Page ---
+// Based on Adafruit Bluefruit HID implementation
 // This report map defines:
-// - Consumer Control (Volume, Play/Pause, etc.) - Report ID 1
-// - Keyboard (Standard 6KRO) - Report ID 2
+// - Keyboard (Standard 6KRO) - Report ID 1
+// - Consumer Control (Media keys like 0x0224 Back) - Report ID 2
 static const uint8_t hidReportMap[] = {
-    // --- Consumer Page (Media Keys) - Report ID 1 ---
-    0x05, 0x0C,        // Usage Page (Consumer)
-    0x09, 0x01,        // Usage (Consumer Control)
-    0xA1, 0x01,        // Collection (Application)
-    0x85, 0x01,        //   Report ID (1)
-    0x15, 0x00,        //   Logical Minimum (0)
-    0x25, 0x01,        //   Logical Maximum (1)
-    0x75, 0x01,        //   Report Size (1)
-    0x95, 0x10,        //   Report Count (16 bits)
-    0x09, 0xE9,        //   Usage (Volume Up)
-    0x09, 0xEA,        //   Usage (Volume Down)
-    0x09, 0xE2,        //   Usage (Mute)
-    0x09, 0xCD,        //   Usage (Play/Pause)
-    0x09, 0xB6,        //   Usage (Next Track)
-    0x09, 0xB5,        //   Usage (Previous Track)
-    0x81, 0x02,        //   Input (Data, Var, Abs)
-    0xC0,              // End Collection
-
-    // --- Keyboard Page - Report ID 2 (Standard 6KRO Keyboard) ---
+    // --- Keyboard Page - Report ID 1 (Standard 6KRO Keyboard) ---
     0x05, 0x01,        // Usage Page (Generic Desktop)
     0x09, 0x06,        // Usage (Keyboard)
     0xA1, 0x01,        // Collection (Application)
-    0x85, 0x02,        //   Report ID (2)
+    0x85, 0x01,        //   Report ID (1)
 
     // Modifier byte (8 bits: Left Ctrl, Shift, Alt, GUI + Right Ctrl, Shift, Alt, GUI)
     0x05, 0x07,        //   Usage Page (Keyboard/Keypad)
@@ -69,6 +47,20 @@ static const uint8_t hidReportMap[] = {
     0x29, 0xFF,        //   Usage Maximum (255)
     0x81, 0x00,        //   Input (Data, Array, Abs)
 
+    0xC0,              // End Collection
+
+    // --- Consumer Page - Report ID 2 ---
+    0x05, 0x0C,        // Usage Page (Consumer)
+    0x09, 0x01,        // Usage (Consumer Control)
+    0xA1, 0x01,        // Collection (Application)
+    0x85, 0x02,        //   Report ID (2)
+    0x15, 0x00,        //   Logical Minimum (0)
+    0x26, 0xFF, 0x03,  //   Logical Maximum (0x03FF)
+    0x19, 0x00,        //   Usage Minimum (0x0000)
+    0x2A, 0xFF, 0x03,  //   Usage Maximum (0x03FF)
+    0x75, 0x10,        //   Report Size (16 bits)
+    0x95, 0x01,        //   Report Count (1)
+    0x81, 0x00,        //   Input (Data, Array, Abs)
     0xC0               // End Collection
 };
 
@@ -82,16 +74,22 @@ bool g_hidInitialized = false;
 
 // HID Switch configuration
 // GPIOピンとHIDキーコードの対応付けを定義
-HidSwitch hidSwitches[3] = {
-  {HID_VOL_UP_GPIO, LOW, 0, HID_STATE_IDLE, HID_VOLUME_UP},
-  {HID_VOL_DN_GPIO, LOW, 0, HID_STATE_IDLE, HID_VOLUME_DOWN},
-  {AI_BUTTON_GPIO, LOW, 0, HID_STATE_IDLE, HID_RIGHT_ARROW}
+HidSwitch hidSwitches[] = {
+  {HID_KEY1_GPIO, LOW, 0, HID_STATE_IDLE, 0x4F}, // 右矢印
+  {HID_KEY2_GPIO, LOW, 0, HID_STATE_IDLE, 0x51}, // 下矢印
+  {HID_KEY3_GPIO, LOW, 0, HID_STATE_IDLE, 0x52}, // 上矢印
+  {HID_KEY4_GPIO, LOW, 0, HID_STATE_IDLE, 0x50}, // 左矢印
+  {HID_KEY5_GPIO, LOW, 0, HID_STATE_IDLE, 0x0224}, // Android 戻る
+  {HID_KEY6_GPIO, LOW, 0, HID_STATE_IDLE, 0x00CD} // 再生一時停止
 };
+
+// 配列サイズを自動計算
+const int HID_SWITCH_COUNT = sizeof(hidSwitches) / sizeof(hidSwitches[0]);
 
 // --- HID Initialization ---
 void initHID() {
     applog("========================================");
-    applog("HID Initialization (Consumer Page)");
+    applog("HID Initialization (Keyboard ID=1, Consumer ID=2)");
     applog("========================================");
 
     // Check if BLE server is initialized
@@ -111,23 +109,23 @@ void initHID() {
     // Set report map
     g_hidDevice->setReportMap((uint8_t*)hidReportMap, sizeof(hidReportMap));
 
-    // Get input report characteristic (Report ID 1 - Consumer)
-    g_hidInputReport = g_hidDevice->getInputReport(1);
-    if (g_hidInputReport) {
-        g_hidInputReport->setCallbacks(nullptr);
-        applog("HID Consumer Input Report (ID=1) configured");
+    // Get keyboard input report characteristic (Report ID 1 - Keyboard)
+    g_hidKeyboardInputReport = g_hidDevice->getInputReport(1);
+    if (g_hidKeyboardInputReport) {
+        g_hidKeyboardInputReport->setCallbacks(nullptr);
+        applog("HID Keyboard Input Report (ID=1) configured");
     } else {
-        applog("ERROR: Failed to get HID Consumer Input Report");
+        applog("ERROR: Failed to get HID Keyboard Input Report");
         return;
     }
 
-    // Get keyboard input report characteristic (Report ID 2 - Keyboard)
-    g_hidKeyboardInputReport = g_hidDevice->getInputReport(2);
-    if (g_hidKeyboardInputReport) {
-        g_hidKeyboardInputReport->setCallbacks(nullptr);
-        applog("HID Keyboard Input Report (ID=2) configured");
+    // Get consumer input report characteristic (Report ID 2 - Consumer)
+    g_hidInputReport = g_hidDevice->getInputReport(2);
+    if (g_hidInputReport) {
+        g_hidInputReport->setCallbacks(nullptr);
+        applog("HID Consumer Input Report (ID=2) configured");
     } else {
-        applog("ERROR: Failed to get HID Keyboard Input Report");
+        applog("ERROR: Failed to get HID Consumer Input Report");
         return;
     }
 
@@ -139,30 +137,34 @@ void initHID() {
     g_hidDevice->getHidService()->start();
     g_hidDevice->getDeviceInfoService()->start();
 
+    // Set device appearance (Keyboard)
+    NimBLEDevice::getAdvertising()->setAppearance(0x03C1); 
+
     g_hidInitialized = true;
 
     applog("========================================");
     applog("✅ HID Service initialized successfully!");
-    applog("  GPIO%d: Volume Up (0x%04X)", HID_VOL_UP_GPIO, HID_VOLUME_UP);
-    applog("  GPIO%d: Volume Down (0x%04X)", HID_VOL_DN_GPIO, HID_VOLUME_DOWN);
-    applog("  GPIO%d: Right Arrow (0x%04X)", AI_BUTTON_GPIO, HID_RIGHT_ARROW);
+    for (int i = 0; i < HID_SWITCH_COUNT; i++) {
+        applog("  GPIO%d: KeyCode=0x%04X",
+               hidSwitches[i].gpio, hidSwitches[i].keyCode);
+    }
     applog("========================================");
 
     // 初期ピン状態を実際のピン状態に合わせる
     // これにより、起動時の誤動作を防止
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < HID_SWITCH_COUNT; i++) {
         hidSwitches[i].pinState = digitalRead(hidSwitches[i].gpio);
         hidSwitches[i].state = HID_STATE_IDLE;
         hidSwitches[i].lastDebounceTime = millis();
-        applog("HID SW%d init: GPIO%d, pinState=%d, keyCode=0x%04X",
-               i, hidSwitches[i].gpio, hidSwitches[i].pinState, hidSwitches[i].keyCode);
+        applog("HID SW%d init: GPIO%d, KeyCode=0x%04X, pinState=%d",
+               i, hidSwitches[i].gpio, hidSwitches[i].keyCode, hidSwitches[i].pinState);
     }
 
     applog("HID Report Map Info:");
-    applog("  Report ID 1: Consumer Control (16 bits)");
-    applog("  Report ID 2: Keyboard (6KRO + Modifier)");
+    applog("  Report ID 1: Keyboard (6KRO + Modifier)");
+    applog("  Report ID 2: Consumer Control (16-bit keycodes: 0x0001-0x03FF, little-endian)");
     applog("  Keyboard report format: [Modifier(1) + Reserved(1) + Keys(6)] = 8 bytes");
-    applog("  Consumer report format: [Data(2)] = 2 bytes");
+    applog("  Consumer report format: [LowByte(1) HighByte(1)] = 2 bytes (little-endian)");
 }
 
 // --- HID Switch Processing ---
@@ -174,7 +176,7 @@ void processHidSwitches() {
 
     unsigned long currentTime = millis();
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < HID_SWITCH_COUNT; i++) {
         HidSwitch* sw = &hidSwitches[i];
         uint8_t reading = digitalRead(sw->gpio);
 
@@ -229,8 +231,8 @@ void sendHidKeyPress(uint16_t keyCode) {
         return;
     }
 
-    // Keyboard Page keys (0x00-0xFF) vs Consumer Page keys (0xE0-0xFF, etc.)
-    if (keyCode < 0xE0 || keyCode == 0x4F) {
+    // Keyboard Page (矢印キー: 0x4F-0x52) vs Consumer Page (その他: 0xCD, 0x0224, etc.)
+    if (keyCode >= 0x4F && keyCode <= 0x52) {
         // Keyboard Page (Report ID 2) - Standard 6KRO keyboard format
         // bikeclockと同じフォーマットを使用: Modifier + 6 keys
         if (g_hidKeyboardInputReport) {
@@ -245,7 +247,7 @@ void sendHidKeyPress(uint16_t keyCode) {
             report[7] = 0x00;   // Key code 6
 
             // デバッグ: 16進数ダンプ
-            applog("HID Keyboard sending: KeyCode=0x%02X", (uint8_t)keyCode);
+            applog("HID Keyboard sending: KeyCode=0x%02X", (unsigned int)(keyCode & 0xFF));
             applog("HID Keyboard report: %02X %02X %02X %02X %02X %02X %02X %02X",
                    report[0], report[1], report[2], report[3], report[4],
                    report[5], report[6], report[7]);
@@ -254,17 +256,16 @@ void sendHidKeyPress(uint16_t keyCode) {
             g_hidKeyboardInputReport->notify();
         }
     } else {
-        // Consumer Page (Report ID 1)
+        // Consumer Control (Report ID 2)
         if (g_hidInputReport) {
             uint8_t report[2];  // Key data (2 bytes)
 
-            // Consumer Page key codes (0x0C00-0x0CFF)
-            // Convert to report format (little-endian 16-bit)
+            // Consumer Control key codes (little-endian 16-bit per HID spec)
             report[0] = keyCode & 0xFF;         // Low byte
             report[1] = (keyCode >> 8) & 0xFF;  // High byte
 
             // デバッグ: 16進数ダンプ
-            applog("HID Consumer sending: KeyCode=0x%04X", keyCode);
+            applog("HID Consumer sending (ID=2): KeyCode=0x%04X", keyCode);
             applog("HID Consumer report: %02X %02X", report[0], report[1]);
 
             g_hidInputReport->setValue(report, sizeof(report));
@@ -286,16 +287,16 @@ void sendHidKeyRelease(uint16_t keyCode) {
         return;
     }
 
-    // bikeclockに合わせて、ConsumerとKeyboardの両方を常にリリースする
+    // bikeclockに合わせて、Consumer ControlとKeyboardの両方を常にリリースする
     // これにより「押されっぱなしになる」問題を修正
 
-    // Release consumer keys (Report ID 1)
+    // Release Consumer Control keys (Report ID 2)
     if (g_hidInputReport) {
         uint8_t report[2];
         report[0] = 0x00;
         report[1] = 0x00;
 
-        applog("HID Consumer release: %02X %02X", report[0], report[1]);
+        applog("HID Consumer release (ID=2): %02X %02X", report[0], report[1]);
 
         g_hidInputReport->setValue(report, sizeof(report));
         g_hidInputReport->notify();
@@ -321,5 +322,3 @@ void sendHidKeyRelease(uint16_t keyCode) {
         g_hidKeyboardInputReport->notify();
     }
 }
-
-#endif // HID_ENABLED
