@@ -143,7 +143,8 @@ void generateFilenameFromRTC(char* filenameBuffer, size_t bufferSize) {
 }
 
 bool isConnectUSB() {
-  return digitalRead(USB_DETECT_PIN) == HIGH;
+  // USB detection disabled (GPIO4 now used for HID Volume Up)
+  return false;
 }
 
 // Helper function to get time from internal RTC and check its validity.

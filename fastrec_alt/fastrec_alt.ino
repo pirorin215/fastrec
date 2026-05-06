@@ -35,6 +35,17 @@ const size_t NUM_VALID_TRANSITIONS = sizeof(validTransitions) / sizeof(validTran
 int g_serviceDisplayMode = 0;  // 0: 1234, 1: 1234, 2-8: 曜日記号確認 (日-土)
 const int NUM_SERVICE_MODES = 10;
 
+// HID key code display variables
+bool g_displayingKeyCode = false;  // Currently displaying HID key code
+uint16_t g_displayingKeyCodeValue = 0;  // Currently displaying HID key code value
+unsigned long g_keyCodeDisplayEndTime = 0;  // When to stop displaying key code
+
+// HID first send flag for vibration feedback
+bool g_firstHidSend = true;  // 初回HID送信フラグ（振動フィードバック用）
+
+// HID wakeup priority mode flag
+bool g_hidWakeupMode = false;  // HID起動中はBLE処理を延期（HID操作を優先）
+
 void setAppState(AppState newState, bool applyDebounce=true, bool resetWakeupTime=true) {
   static unsigned long lastStateChangeTime = 0; // 状態変更のデバウンス用
 
@@ -98,10 +109,22 @@ void goDeepSleep() {
   // モーターを確実にOFF
   digitalWrite(MOTOR_GPIO, LOW);
 
-  // 録音開始や録音停止ボタンを押したらディープスリープ復帰するコード
-  esp_sleep_enable_ext1_wakeup_io(BUTTON_PIN_BITMASK(REC_BUTTON_GPIO) | BUTTON_PIN_BITMASK(AI_BUTTON_GPIO), ESP_EXT1_WAKEUP_ANY_HIGH);
+  // 録音開始や録音停止ボタン、HIDスイッチを押したらディープスリープ復帰するコード
+  esp_sleep_enable_ext1_wakeup_io(
+    BUTTON_PIN_BITMASK(REC_BUTTON_GPIO) |
+    BUTTON_PIN_BITMASK(HID_VOL_UP_GPIO) |
+    BUTTON_PIN_BITMASK(HID_VOL_DN_GPIO) |
+    BUTTON_PIN_BITMASK(AI_BUTTON_GPIO),
+    ESP_EXT1_WAKEUP_ANY_HIGH
+  );
+
+  // RTC GPIO設定（プルダウン有効化）
   rtc_gpio_pulldown_en(REC_BUTTON_GPIO);
   rtc_gpio_pullup_dis(REC_BUTTON_GPIO);
+  rtc_gpio_pulldown_en(HID_VOL_UP_GPIO);
+  rtc_gpio_pullup_dis(HID_VOL_UP_GPIO);
+  rtc_gpio_pulldown_en(HID_VOL_DN_GPIO);
+  rtc_gpio_pullup_dis(HID_VOL_DN_GPIO);
   rtc_gpio_pulldown_en(AI_BUTTON_GPIO);
   rtc_gpio_pullup_dis(AI_BUTTON_GPIO);
 
@@ -441,17 +464,18 @@ void handleIdle() {
     return;
   }
 
+#ifdef HID_ENABLED
+  processHidSwitches();
+#endif
+
   if (digitalRead(REC_BUTTON_GPIO) == HIGH) {
     setLcdBrightness(0xFF);
+    g_hidWakeupMode = false;  // 録音キー押下でHID起動モードを解除
     g_is_ai_recording = false;
     startRecording();
     return;
-  } else if (digitalRead(AI_BUTTON_GPIO) == HIGH) {
-    setLcdBrightness(0xFF);
-    g_is_ai_recording = true;
-    startRecording();
-    return;
   }
+  // AI_BUTTON_GPIOはHID右矢印キーとして使用（AI録音機能は無効化）
 
   // Go to deep sleep if idle for a while
   // g_retryCount == 0: 最初のタイムアウト (15秒)
@@ -530,6 +554,10 @@ void handleSetup() {
 
   start_ble_advertising();
 
+#ifdef HID_ENABLED
+  processHidSwitches();
+#endif
+
   if (millis() - lastDisplayUpdateTime > 200) {
     updateDisplay("");
     lastDisplayUpdateTime = millis();
@@ -573,6 +601,10 @@ void handleService() {
   static bool lastRecButtonState = false;  // Previous REC button state
   static bool lastBothButtonState = false; // Previous both buttons state
   static unsigned long lastButtonChangeTime = 0;
+
+#ifdef HID_ENABLED
+  processHidSwitches();
+#endif
 
   // Update display
   if (millis() - lastDisplayUpdateTime > 200) {
@@ -629,6 +661,8 @@ void wakeupLogic() {
   switch (wakeup_reason) {
     case ESP_SLEEP_WAKEUP_EXT1: {
       uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
+
+      // REC_BUTTON_GPIOでウェイクアップした場合
       if (wakeup_pin_mask & BUTTON_PIN_BITMASK(REC_BUTTON_GPIO)) {
         if (digitalRead(REC_BUTTON_GPIO) == HIGH) { // If button is currently pressed
             g_enable_logging = false;
@@ -637,15 +671,24 @@ void wakeupLogic() {
         } else {
             g_enable_logging = true;
         }
-      } else if (wakeup_pin_mask & BUTTON_PIN_BITMASK(AI_BUTTON_GPIO)) {
-        if (digitalRead(AI_BUTTON_GPIO) == HIGH) { // If button is currently pressed
-            g_enable_logging = false;
-            g_is_ai_recording = true;
-            startRecording();
-        } else {
-            g_enable_logging = true;
-        }
       }
+      // HIDスイッチでウェイクアップした場合
+      else if (wakeup_pin_mask & BUTTON_PIN_BITMASK(HID_VOL_UP_GPIO)) {
+        applog("Wakeup by HID Volume Up button");
+        g_hidWakeupMode = true;  // HID起動モードを有効化（BLE処理を延期）
+        g_enable_logging = true;
+      }
+      else if (wakeup_pin_mask & BUTTON_PIN_BITMASK(HID_VOL_DN_GPIO)) {
+        applog("Wakeup by HID Volume Down button");
+        g_hidWakeupMode = true;  // HID起動モードを有効化（BLE処理を延期）
+        g_enable_logging = true;
+      }
+      else if (wakeup_pin_mask & BUTTON_PIN_BITMASK(AI_BUTTON_GPIO)) {
+        applog("Wakeup by HID Right Arrow button");
+        g_hidWakeupMode = true;  // HID起動モードを有効化（BLE処理を延期）
+        g_enable_logging = true;
+      }
+
       setLcdBrightness(0xFF); // ボタンでウェイクアップした場合はLCDを明るくする
       break;
     }
@@ -659,6 +702,20 @@ void wakeupLogic() {
       applog("wakeup_reason not clear: %d", wakeup_reason);
       break;
   }
+
+#ifdef HID_ENABLED
+  // Reset HID switch states after wakeup
+  for (int i = 0; i < 3; i++) {
+    hidSwitches[i].pinState = digitalRead(hidSwitches[i].gpio);
+    hidSwitches[i].state = HID_STATE_IDLE;
+    hidSwitches[i].lastDebounceTime = 0;
+    // Release each HID key
+    sendHidKeyRelease(hidSwitches[i].keyCode);
+  }
+  applog("HID switch states reset after wakeup");
+  // 初回HID送信フラグをリセット
+  g_firstHidSend = true;
+#endif
 }
 
 void initPins() {
@@ -668,7 +725,12 @@ void initPins() {
   pinMode(REC_BUTTON_GPIO, INPUT_PULLDOWN);
   pinMode(AI_BUTTON_GPIO, INPUT_PULLDOWN);
   pinMode(MOTOR_GPIO, OUTPUT);
-  pinMode(USB_DETECT_PIN, INPUT);  // Initialize USB connect pin
+
+  // Initialize HID switch pins
+#ifdef HID_ENABLED
+  pinMode(HID_VOL_UP_GPIO, INPUT_PULLDOWN);
+  pinMode(HID_VOL_DN_GPIO, INPUT_PULLDOWN);
+#endif
 
 }
 
@@ -731,6 +793,10 @@ void setup() {
 
   start_ble_server();
   initAdc();
+
+#ifdef HID_ENABLED
+  initHID();
+#endif
 
   // Initialize voltage history buffer with current voltage
   float initialVoltage = getBatteryVoltage();

@@ -274,6 +274,46 @@ void displayServiceMode() {
 }
 
 void updateDisplay(const char* msg) {
+  // Check if displaying HID key code
+  if (g_displayingKeyCode) {
+    if (millis() < g_keyCodeDisplayEndTime) {
+      display.clear();
+
+      // Display key code in decimal format
+      char keyCodeStr[8];
+      snprintf(keyCodeStr, sizeof(keyCodeStr), "%d", g_displayingKeyCodeValue);
+
+      // Calculate center position
+      // Screen is 72x40, font is 13x28
+      uint8_t numChars = strlen(keyCodeStr);
+      uint8_t totalWidth = numChars * FONT_WIDTH + (numChars - 1) * 2;  // 2px spacing
+      uint8_t startX = (72 - totalWidth) / 2;
+      uint8_t startY = (40 - FONT_HEIGHT) / 2;
+
+      // Draw each character
+      for (uint8_t i = 0; i < numChars; i++) {
+        char c = keyCodeStr[i];
+        uint8_t charIndex = 255;
+
+        // Convert character to font index
+        if (c >= '0' && c <= '9') {
+          charIndex = c - '0';
+        }
+
+        if (charIndex != 255) {
+          drawCustomChar(startX + i * (FONT_WIDTH + 2), startY, charIndex);
+        }
+      }
+
+      display.display();
+      return;  // Skip normal display
+    } else {
+      // Display time expired, return to normal display
+      g_displayingKeyCode = false;
+      g_displayingKeyCodeValue = 0;
+    }
+  }
+
   display.clear();
   switch (g_currentAppState) {
 

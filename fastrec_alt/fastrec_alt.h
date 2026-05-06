@@ -16,8 +16,9 @@
 #define AI_BUTTON_GPIO     GPIO_NUM_2
 
 #define MOTOR_GPIO         GPIO_NUM_3
-#define USB_DETECT_PIN     GPIO_NUM_4
+#define HID_VOL_UP_GPIO    GPIO_NUM_4  // Volume Up (HID 0xE9)
 #define BATTERY_DIV_PIN    GPIO_NUM_5
+#define HID_VOL_DN_GPIO    GPIO_NUM_6  // Volume Down (HID 0xEA)
 #define I2S_BCLK_PIN       GPIO_NUM_7
 #define I2S_DOUT_PIN       GPIO_NUM_8
 #define I2S_LRCK_PIN       GPIO_NUM_9
@@ -139,6 +140,9 @@ typedef struct {
 
 // --- Global Variables (Declarations only, definitions will remain in .ino) ---
 
+// BLE Server
+extern NimBLEServer* pBLEServer;
+
 // fastrec_alt
 
 RTC_DATA_ATTR bool LOG_AT_BOOT = false;
@@ -198,5 +202,50 @@ RTC_DATA_ATTR time_t g_nextWakeupTime = 0;  // 0以外の場合は指定時刻�
 
 // Function Prototypes ---
 bool createDefaultSettingIni();
+
+// --- HID Settings ---
+#define HID_ENABLED  // Enable HID functionality
+#define HID_DEBOUNCE_DELAY_MS  20   // Switch debounce delay
+
+// HID Key Codes (Consumer Page)
+#define HID_VOLUME_UP    0xE9  // Volume Up
+#define HID_VOLUME_DOWN  0xEA  // Volume Down
+#define HID_MUTE         0xE2  // Mute
+#define HID_PLAY_PAUSE   0xCD  // Play/Pause
+#define HID_NEXT_TRACK   0xB6  // Next Track
+#define HID_PREV_TRACK   0xB5  // Previous Track
+
+// HID Key Codes (Keyboard Page)
+#define HID_RIGHT_ARROW  0x4F  // Right Arrow
+
+// HID Switch State
+enum HidSwitchState {
+    HID_STATE_IDLE,
+    HID_STATE_PRESS
+};
+
+// HID Switch Structure
+struct HidSwitch {
+    uint8_t gpio;
+    uint8_t pinState;
+    unsigned long lastDebounceTime;
+    HidSwitchState state;
+    uint16_t keyCode;
+};
+
+// HID Global Variables
+extern HidSwitch hidSwitches[3];  // 3 HID switches: VolUp, VolDn, RightArrow
+extern bool g_hidInitialized;
+extern bool g_firstHidSend;  // 初回HID送信フラグ（振動フィードバック用）
+extern bool g_hidWakeupMode;  // HID起動中はBLE処理を延期（HID操作を優先）
+extern bool g_displayingKeyCode;   // Currently displaying HID key code
+extern uint16_t g_displayingKeyCodeValue;  // Currently displaying HID key code value
+extern unsigned long g_keyCodeDisplayEndTime;  // When to stop displaying key code
+
+// HID Function Prototypes
+void initHID();
+void processHidSwitches();
+void sendHidKeyPress(uint16_t keyCode);
+void sendHidKeyRelease(uint16_t keyCode);
 
 #endif // FASTREC_INO_H

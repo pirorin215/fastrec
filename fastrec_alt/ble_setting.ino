@@ -38,6 +38,11 @@ void transferFileChunked() {
     return;
   }
 
+  // HID起動モード中はBLE処理を延期（HID操作を優先）
+  if (g_hidWakeupMode) {
+    return;  // 何もせずに戻る（BLE処理を延期）
+  }
+
   // Abort if recording button is pressed before starting
   if (digitalRead(REC_BUTTON_GPIO) == HIGH) {
     applog("Recording button pressed. Aborting file transfer before start.");
@@ -572,6 +577,16 @@ class MyCallbacks : public NimBLECharacteristicCallbacks {
       g_lastBleCommand = value; // Store the last received command
       g_lastActivityTime = millis();  // コマンド受信もアクティビティ
 
+      // HID起動モード中はBLEコマンド処理を延期（HID操作を優先）
+      // ACK処理とファイル転送以外のすべてのコマンドを延期
+      if (g_hidWakeupMode) {
+        std::string deferMessage = "DEFER: HID wakeup mode - Command deferred";
+        pResponseCharacteristic->setValue(deferMessage.c_str());
+        pResponseCharacteristic->notify();
+        applog(deferMessage.c_str());
+        return;
+      }
+
       // SETUP状態でも設定関係のコマンドは許可する
       if (g_currentAppState != IDLE && g_currentAppState != SETUP) {
         std::string busyMessage = "ERROR: Device is busy (State: " + std::string(appStateStrings[g_currentAppState]) + "). Command rejected.";
@@ -640,9 +655,10 @@ void start_ble_server() {
 
   NimBLEDevice::init(DEVICE_NAME);
 
-  // --- Add BLE Security ---
-  NimBLEDevice::setSecurityAuth(true, true, true);
-  NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
+  // --- BLE Security ---
+  // ペアリング情報を永続化するためセキュリティを有効化
+  NimBLEDevice::setSecurityAuth(true, true, true);  // Bonding, MITM, Secure Connections
+  NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);  // 画面なしデバイス
   // --- End BLE Security ---
 
   NimBLEDevice::setDefaultPhy(2, 2);
@@ -707,7 +723,18 @@ void start_ble_server() {
   // BLEアドバタイズ（広告）の準備
   NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
   pAdvertising->setName(DEVICE_NAME);          // Explicitly set advertising name
-  pAdvertising->addServiceUUID(SERVICE_UUID);  // Re-add service UUID
+
+  // Add custom service UUID to advertising
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+
+#ifdef HID_ENABLED
+  // Add HID service UUID to advertising
+  // HID service UUID is 0x1812
+  pAdvertising->addServiceUUID(NimBLEUUID("1812"));
+  // Set appearance to HID Keyboard (0x03C1)
+  pAdvertising->setAppearance(0x03C1);
+#endif
+
   pAdvertising->enableScanResponse(true);      // Enable scan response
 }
 
