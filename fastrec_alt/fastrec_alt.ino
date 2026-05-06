@@ -463,18 +463,26 @@ void handleIdle() {
     return;
   }
 
-#ifdef HID_ENABLED
-  processHidSwitches();
-#endif
-
   if (digitalRead(REC_BUTTON_GPIO) == HIGH) {
     setLcdBrightness(0xFF);
-    g_hidWakeupMode = false;  // 録音キー押下でHID起動モードを解除
+    g_hidWakeupMode = false;
     g_is_ai_recording = false;
     startRecording();
     return;
   }
-  // AI_BUTTON_GPIOはHID右矢印キーとして使用（AI録音機能は無効化）
+
+#ifndef USE_HID_FOR_AI_BUTTON
+  if (digitalRead(AI_BUTTON_GPIO) == HIGH) {
+    setLcdBrightness(0xFF);
+    g_is_ai_recording = true;
+    startRecording();
+    return;
+  }
+  processHidSwitches(); // Always process other HID switches (Volume Up/Down)
+#else
+  // AI_BUTTON_GPIO is also handled as HID switch
+  processHidSwitches();
+#endif
 
   // Go to deep sleep if idle for a while
   // g_retryCount == 0: 最初のタイムアウト (15秒)
@@ -553,9 +561,7 @@ void handleSetup() {
 
   start_ble_advertising();
 
-#ifdef HID_ENABLED
   processHidSwitches();
-#endif
 
   if (millis() - lastDisplayUpdateTime > 200) {
     updateDisplay("");
@@ -601,9 +607,7 @@ void handleService() {
   static bool lastBothButtonState = false; // Previous both buttons state
   static unsigned long lastButtonChangeTime = 0;
 
-#ifdef HID_ENABLED
   processHidSwitches();
-#endif
 
   // Update display
   if (millis() - lastDisplayUpdateTime > 200) {
@@ -686,8 +690,17 @@ void wakeupLogic() {
         g_enable_logging = true;
       }
       else if (wakeup_pin_mask & BUTTON_PIN_BITMASK(AI_BUTTON_GPIO)) {
-        applog("Wakeup by HID Right Arrow button");
-        g_hidWakeupMode = true;  // HID起動モードを有効化（BLE処理を延期）
+#ifdef USE_HID_FOR_AI_BUTTON
+        applog("Wakeup by HID button");
+        g_hidWakeupMode = true;
+#else
+        applog("Wakeup by AI button - starting AI recording");
+        if (digitalRead(AI_BUTTON_GPIO) == HIGH) {
+            g_enable_logging = false;
+            g_is_ai_recording = true;
+            startRecording();
+        }
+#endif
         g_enable_logging = true;
       }
 
@@ -705,9 +718,8 @@ void wakeupLogic() {
       break;
   }
 
-#ifdef HID_ENABLED
   // Reset HID switch states after wakeup
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < HID_SWITCH_COUNT; i++) {
     hidSwitches[i].pinState = digitalRead(hidSwitches[i].gpio);
     hidSwitches[i].state = HID_STATE_IDLE;
     hidSwitches[i].lastDebounceTime = 0;
@@ -715,7 +727,6 @@ void wakeupLogic() {
     sendHidKeyRelease(hidSwitches[i].keyCode);
   }
   applog("HID switch states reset after wakeup");
-#endif
 }
 
 void initPins() {
@@ -726,12 +737,8 @@ void initPins() {
   pinMode(AI_BUTTON_GPIO, INPUT_PULLDOWN);
   pinMode(MOTOR_GPIO, OUTPUT);
 
-  // Initialize HID switch pins
-#ifdef HID_ENABLED
   pinMode(HID_VOL_UP_GPIO, INPUT_PULLDOWN);
   pinMode(HID_VOL_DN_GPIO, INPUT_PULLDOWN);
-#endif
-
 }
 
 void initAdc() {
@@ -794,9 +801,7 @@ void setup() {
   start_ble_server();
   initAdc();
 
-#ifdef HID_ENABLED
   initHID();
-#endif
 
   // Initialize voltage history buffer with current voltage
   float initialVoltage = getBatteryVoltage();

@@ -11,8 +11,6 @@
 
 #include "fastrec_alt.h"
 
-#ifdef HID_ENABLED
-
 #include "NimBLEHIDDevice.h"
 
 // --- HID Report Map for Consumer Page (Media Keys) + Keyboard Page ---
@@ -80,12 +78,20 @@ NimBLECharacteristic* g_hidOutputReport = nullptr;
 
 bool g_hidInitialized = false;
 
+#ifdef USE_HID_FOR_AI_BUTTON
+#define HID_SWITCH_COUNT 3
+#else
+#define HID_SWITCH_COUNT 2
+#endif
+
 // HID Switch configuration
 // GPIOピンとHIDキーコードの対応付けを定義
-HidSwitch hidSwitches[3] = {
+HidSwitch hidSwitches[HID_SWITCH_COUNT] = {
   {HID_VOL_UP_GPIO, LOW, 0, HID_STATE_IDLE, HID_VOLUME_UP},
-  {HID_VOL_DN_GPIO, LOW, 0, HID_STATE_IDLE, HID_VOLUME_DOWN},
-  {AI_BUTTON_GPIO, LOW, 0, HID_STATE_IDLE, HID_RIGHT_ARROW}
+  {HID_VOL_DN_GPIO, LOW, 0, HID_STATE_IDLE, HID_VOLUME_DOWN}
+#ifdef USE_HID_FOR_AI_BUTTON
+  ,{AI_BUTTON_GPIO, LOW, 0, HID_STATE_IDLE, HID_RIGHT_ARROW}
+#endif
 };
 
 // --- HID Initialization ---
@@ -145,12 +151,14 @@ void initHID() {
     applog("✅ HID Service initialized successfully!");
     applog("  GPIO%d: Volume Up (0x%04X)", HID_VOL_UP_GPIO, HID_VOLUME_UP);
     applog("  GPIO%d: Volume Down (0x%04X)", HID_VOL_DN_GPIO, HID_VOLUME_DOWN);
+#ifdef USE_HID_FOR_AI_BUTTON
     applog("  GPIO%d: Right Arrow (0x%04X)", AI_BUTTON_GPIO, HID_RIGHT_ARROW);
+#endif
     applog("========================================");
 
     // 初期ピン状態を実際のピン状態に合わせる
     // これにより、起動時の誤動作を防止
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < HID_SWITCH_COUNT; i++) {
         hidSwitches[i].pinState = digitalRead(hidSwitches[i].gpio);
         hidSwitches[i].state = HID_STATE_IDLE;
         hidSwitches[i].lastDebounceTime = millis();
@@ -174,7 +182,7 @@ void processHidSwitches() {
 
     unsigned long currentTime = millis();
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < HID_SWITCH_COUNT; i++) {
         HidSwitch* sw = &hidSwitches[i];
         uint8_t reading = digitalRead(sw->gpio);
 
@@ -321,5 +329,3 @@ void sendHidKeyRelease(uint16_t keyCode) {
         g_hidKeyboardInputReport->notify();
     }
 }
-
-#endif // HID_ENABLED

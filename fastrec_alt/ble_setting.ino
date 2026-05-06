@@ -738,13 +738,11 @@ void start_ble_server() {
   // Add custom service UUID to advertising
   pAdvertising->addServiceUUID(SERVICE_UUID);
 
-#ifdef HID_ENABLED
   // Add HID service UUID to advertising
   // HID service UUID is 0x1812
   pAdvertising->addServiceUUID(NimBLEUUID("1812"));
   // Set appearance to HID Keyboard (0x03C1)
   pAdvertising->setAppearance(0x03C1);
-#endif
 
   pAdvertising->enableScanResponse(true);      // Enable scan response
 }

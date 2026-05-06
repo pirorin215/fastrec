@@ -204,7 +204,7 @@ RTC_DATA_ATTR time_t g_nextWakeupTime = 0;  // 0以外の場合は指定時刻�
 bool createDefaultSettingIni();
 
 // --- HID Settings ---
-#define HID_ENABLED  // Enable HID functionality
+#define USE_HID_FOR_AI_BUTTON // Use AI_BUTTON_GPIO for HID key (Right Arrow)
 #define HID_DEBOUNCE_DELAY_MS  20   // Switch debounce delay
 
 // HID Key Codes (Consumer Page)
@@ -233,8 +233,14 @@ struct HidSwitch {
     uint16_t keyCode;
 };
 
+#ifdef USE_HID_FOR_AI_BUTTON
+#define HID_SWITCH_COUNT 3
+#else
+#define HID_SWITCH_COUNT 2
+#endif
+
 // HID Global Variables
-extern HidSwitch hidSwitches[3];  // 3 HID switches: VolUp, VolDn, RightArrow
+extern HidSwitch hidSwitches[HID_SWITCH_COUNT];  // 2 or 3 HID switches
 extern bool g_hidInitialized;
 extern bool g_hidWakeupMode;  // HID起動中はBLE処理を延期（HID操作を優先）
 
