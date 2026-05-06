@@ -17,7 +17,7 @@ private const val TAG = "SummaryInfoCard"
 
 @Composable
 fun SummaryInfoCard(deviceInfo: DeviceInfoResponse?) {
-    Log.d(TAG, "SummaryInfoCard received DeviceInfo: Battery=${deviceInfo?.batteryLevel ?: "N/A"}%, WAVs=${deviceInfo?.wavCount ?: "N/A"}") // Added log
+    Log.d(TAG, "SummaryInfoCard received DeviceInfo: Battery=${String.format("%.2f", deviceInfo?.batteryVoltage ?: 0.0f)}V, WAVs=${deviceInfo?.wavCount ?: "N/A"}")
     var expanded by remember { mutableStateOf(false) }
 
     Card(
@@ -30,7 +30,7 @@ fun SummaryInfoCard(deviceInfo: DeviceInfoResponse?) {
                 horizontalArrangement = Arrangement.SpaceAround // 均等配置
             ) {
 
-                InfoItem(icon = Icons.Default.BatteryChargingFull, label = "Battery", value = "${String.format("%.0f", deviceInfo?.batteryLevel ?: 0.0f)}%", modifier = Modifier.weight(1f))
+                InfoItem(icon = Icons.Default.BatteryChargingFull, label = "Battery", value = "${String.format("%.2f", deviceInfo?.batteryVoltage ?: 0.0f)} V", modifier = Modifier.weight(1f))
                 InfoItem(icon = Icons.Default.SdStorage, label = "Storage", value = "${deviceInfo?.littlefsUsagePercent ?: 0}%", modifier = Modifier.weight(1f))
                 InfoItem(icon = Icons.Default.Audiotrack, label = "WAVs", value = (deviceInfo?.wavCount ?: 0).toString(), modifier = Modifier.weight(1f))
                 InfoItem(icon = Icons.Default.Warning, label = "BufOvf", value = (deviceInfo?.bufferOverflow ?: 0).toString(), modifier = Modifier.weight(1f), isError = (deviceInfo?.bufferOverflow ?: 0) != 0)
@@ -43,7 +43,6 @@ fun SummaryInfoCard(deviceInfo: DeviceInfoResponse?) {
             }
             if (expanded) {
                 Spacer(modifier = Modifier.size(8.dp))
-                InfoRow(label = "バッテリー電圧", value = "${String.format("%.2f", deviceInfo?.batteryVoltage ?: 0.0f)} V")
                 InfoRow(label = "アプリ状態", value = deviceInfo?.appState ?: "-")
                 InfoRow(label = "ストレージ使用量", value = "${deviceInfo?.littlefsUsedBytes ?: 0} bytes")
                 InfoRow(label = "ストレージ総容量", value = "${(deviceInfo?.littlefsTotalBytes ?: 0) / 1024 / 1024} MB")

@@ -107,6 +107,9 @@ class BleConnectionManager(
                 }
                 is ConnectionState.Disconnected -> {
                     logManager.addLog("Disconnected from device")
+                    // 自動再接続の試行: 手動の「再接続」ボタンと同じ「一度明示的に切断してから再スキャン」
+                    // するロジックを自動化し、AndroidのBLEスタックに残った中途半端な状態をクリアする
+                    forceReconnect()
                 }
                 is ConnectionState.Error -> {
                     logManager.addLog("Connection error: ${state.message}", LogLevel.ERROR)

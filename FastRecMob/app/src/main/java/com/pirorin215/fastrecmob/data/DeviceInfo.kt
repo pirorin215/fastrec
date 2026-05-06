@@ -9,7 +9,6 @@ data class DeviceInfoResponse(
     @SerialName("wav_count") val wavCount: Int,
     @SerialName("txt_count") val txtCount: Int,
     @SerialName("ini_count") val iniCount: Int,
-    @SerialName("battery_level") val batteryLevel: Float,
     @SerialName("battery_voltage") val batteryVoltage: Float,
     @SerialName("app_state") val appState: String,
 

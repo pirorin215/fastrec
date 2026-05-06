@@ -311,7 +311,8 @@ fun MainScreen(
                             AppLogCard(
                                 logs = logs,
                                 onDismiss = { showAppLogPanel = false },
-                                onClearLogs = { viewModel.clearLogs() }
+                                onClearLogs = { viewModel.clearLogs() },
+                                onSaveLogs = { viewModel.saveLogsToFile() }
                             )
                         }
                     }

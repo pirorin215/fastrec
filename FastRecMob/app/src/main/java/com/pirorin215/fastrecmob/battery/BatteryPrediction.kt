@@ -194,14 +194,13 @@ object BatteryPredictor {
 
         // 全履歴データをCSV形式で出力
         Log.d("BatteryData", "=== HISTORY DATA CSV ===")
-        Log.d("BatteryData", "Index,Timestamp,DateTime,Voltage,BatteryLevel,Latitude,Longitude,IsInterpolated")
+        Log.d("BatteryData", "Index,Timestamp,DateTime,Voltage,Latitude,Longitude,IsInterpolated")
         history.forEachIndexed { index, entry ->
             val dateTime = dateFormat.format(Date(entry.timestamp))
             val voltage = entry.batteryVoltage ?: ""
-            val level = entry.batteryLevel ?: ""
             val lat = entry.latitude ?: ""
             val lon = entry.longitude ?: ""
-            Log.d("BatteryData", "$index,${entry.timestamp},$dateTime,$voltage,$level,$lat,$lon,${entry.isInterpolated}")
+            Log.d("BatteryData", "$index,${entry.timestamp},$dateTime,$voltage,$lat,$lon,${entry.isInterpolated}")
         }
 
         // 充電イベントの情報

@@ -90,6 +90,12 @@ class FileTransferManager(
     private var currentDownloadingFileName: String? = null
     private var _transferStartTime = 0L
     private var sortedChunks = sortedMapOf<Int, ByteArray>()
+
+    /**
+     * Get the currently downloading file name for retry purposes
+     * Used by BleOrchestrator to resume interrupted transfers
+     */
+    fun getCurrentDownloadingFileName(): String? = currentDownloadingFileName
     private var currentCommandCompletion: CompletableDeferred<Pair<Boolean, String?>>? = null
     private var currentDeleteCompletion: CompletableDeferred<Boolean>? = null
     private var downloadTimeoutJob: Job? = null

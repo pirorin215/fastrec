@@ -122,7 +122,6 @@ class DeviceHistoryViewModel(
         val averagedEntries = roundedEntries
             .groupBy { it.timestamp }
             .map { (timestamp, group) ->
-                val avgBatteryLevel = group.mapNotNull { it.batteryLevel }.average().toFloat().takeIf { it.isFinite() }
                 val avgBatteryVoltage = group.mapNotNull { it.batteryVoltage }.average().toFloat().takeIf { it.isFinite() }
                 val avgLatitude = group.mapNotNull { it.latitude }.average().takeIf { it.isFinite() }
                 val avgLongitude = group.mapNotNull { it.longitude }.average().takeIf { it.isFinite() }
@@ -131,7 +130,6 @@ class DeviceHistoryViewModel(
                     timestamp = timestamp,
                     latitude = avgLatitude,
                     longitude = avgLongitude,
-                    batteryLevel = avgBatteryLevel,
                     batteryVoltage = avgBatteryVoltage
                 )
             }
@@ -159,11 +157,7 @@ class DeviceHistoryViewModel(
                     val interpolatedTimestamp = current.timestamp + h * (1000 * 60 * 60)
                     val ratio = h.toFloat() / hoursDiff.toFloat()
 
-                    // 線形補間でバッテリーレベルと電圧を計算
-                    val interpolatedBatteryLevel = if (current.batteryLevel != null && next.batteryLevel != null) {
-                        current.batteryLevel + (next.batteryLevel - current.batteryLevel) * ratio
-                    } else null
-
+                    // 線形補間でバッテリー電圧を計算
                     val interpolatedBatteryVoltage = if (current.batteryVoltage != null && next.batteryVoltage != null) {
                         current.batteryVoltage + (next.batteryVoltage - current.batteryVoltage) * ratio
                     } else null
@@ -181,7 +175,6 @@ class DeviceHistoryViewModel(
                             timestamp = interpolatedTimestamp,
                             latitude = interpolatedLatitude,
                             longitude = interpolatedLongitude,
-                            batteryLevel = interpolatedBatteryLevel,
                             batteryVoltage = interpolatedBatteryVoltage,
                             isInterpolated = true
                         )

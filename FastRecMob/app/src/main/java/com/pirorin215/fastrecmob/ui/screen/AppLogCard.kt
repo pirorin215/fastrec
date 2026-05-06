@@ -21,9 +21,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 
 @Composable
-fun AppLogCard(logs: List<String>, onDismiss: () -> Unit, onClearLogs: () -> Unit) {
+fun AppLogCard(
+    logs: List<String>, 
+    onDismiss: () -> Unit, 
+    onClearLogs: () -> Unit,
+    onSaveLogs: () -> String?
+) {
     val context = LocalContext.current
     val clipboardManager = context.getSystemService(ClipboardManager::class.java) // Use getSystemService
     val snackbarHostState = remember { SnackbarHostState() }
@@ -44,6 +52,22 @@ fun AppLogCard(logs: List<String>, onDismiss: () -> Unit, onClearLogs: () -> Uni
                     modifier = Modifier.size(24.dp)
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = "Clear logs")
+                }
+                Spacer(modifier = Modifier.width(20.dp))
+                IconButton(
+                    onClick = {
+                        val path = onSaveLogs()
+                        scope.launch {
+                            if (path != null) {
+                                snackbarHostState.showSnackbar("ログを保存しました: $path")
+                            } else {
+                                snackbarHostState.showSnackbar("ログの保存に失敗しました")
+                            }
+                        }
+                    },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = "Save logs to file")
                 }
                 Spacer(modifier = Modifier.width(20.dp))
                 IconButton(

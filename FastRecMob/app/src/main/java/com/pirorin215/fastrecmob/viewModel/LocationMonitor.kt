@@ -9,6 +9,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class LocationMonitor(
@@ -31,13 +32,23 @@ class LocationMonitor(
         }
         logManager.addLog("Starting location updates")
         lowPowerLocationJob = scope.launch {
+            // Initialize from repository if currently null to provide immediate last known location
+            if (_currentForegroundLocation.value == null) {
+                lastKnownLocationRepository.lastKnownLocationFlow.first()?.let { lastLocation ->
+                    _currentForegroundLocation.value = lastLocation
+                    logManager.addDebugLog("Initialized location from cache: Lat=${lastLocation.latitude}, Lng=${lastLocation.longitude}")
+                }
+            }
+
             while (true) {
                 locationTracker.getLowPowerLocation().onSuccess { locationData ->
                     _currentForegroundLocation.value = locationData
-                    logManager.addDebugLog("Location updated: Lat=${locationData.latitude}, Lng=${locationData.longitude}")
+                    // Persist successfully fetched location to repository
+                    lastKnownLocationRepository.saveLastKnownLocation(locationData)
+                    logManager.addDebugLog("Location updated and saved: Lat=${locationData.latitude}, Lng=${locationData.longitude}")
                 }.onFailure { e ->
-                    _currentForegroundLocation.value = null // Clear stale location on failure
-                    logManager.addDebugLog("Location update failed: ${e.message}")
+                    // Keep previous location instead of clearing it to ensure we always have a "last known" value
+                    logManager.addDebugLog("Location update failed, keeping previous value: ${e.message}")
                 }
                 delay(30000L) // Update every 30 seconds
             }
@@ -46,6 +57,7 @@ class LocationMonitor(
 
     private suspend fun saveCurrentLocationAsLastKnown() {
         locationTracker.getCurrentLocation().onSuccess { locationData ->
+            _currentForegroundLocation.value = locationData
             lastKnownLocationRepository.saveLastKnownLocation(locationData)
             logManager.addDebugLog("Saved location")
         }.onFailure { e ->
@@ -61,8 +73,9 @@ class LocationMonitor(
     fun stopLowPowerLocationUpdates() {
         lowPowerLocationJob?.cancel()
         lowPowerLocationJob = null
-        _currentForegroundLocation.value = null // Clear location when stopping
-        logManager.addLog("Stopped location updates")
+        // CRITICAL: Do NOT clear _currentForegroundLocation.value here.
+        // Keeping the last value ensures it's available for background transcription tasks.
+        logManager.addLog("Stopped location updates (keeping last known location)")
     }
 
     fun onCleared() {

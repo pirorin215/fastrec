@@ -16,8 +16,13 @@
 #define AI_BUTTON_GPIO     GPIO_NUM_2
 
 #define MOTOR_GPIO         GPIO_NUM_3
-#define USB_DETECT_PIN     GPIO_NUM_4
+#define HID_KEY1_GPIO      GPIO_NUM_4
 #define BATTERY_DIV_PIN    GPIO_NUM_5
+#define HID_KEY2_GPIO      GPIO_NUM_6
+#define HID_KEY3_GPIO      GPIO_NUM_39
+#define HID_KEY4_GPIO      GPIO_NUM_40
+#define HID_KEY5_GPIO      GPIO_NUM_41
+#define HID_KEY6_GPIO      GPIO_NUM_42
 #define I2S_BCLK_PIN       GPIO_NUM_7
 #define I2S_DOUT_PIN       GPIO_NUM_8
 #define I2S_LRCK_PIN       GPIO_NUM_9
@@ -33,7 +38,7 @@ const long SERIAL_TIMEOUT_MS = 5000;  // 5 seconds timeout for serial connection
 unsigned long DEEP_SLEEP_DELAY_MS = 15000;
 unsigned long DEEP_SLEEP_CYCLE_MINUTES = 60; // Default 60 minutes
 unsigned long DEEP_SLEEP_CYCLE_MS = DEEP_SLEEP_CYCLE_MINUTES * 60 * 1000; // Calculated from minutes
-float BAT_VOL_MIN = 3.0f;
+float BAT_VOL_MIN = 3.6f;
 float BAT_VOL_MULT = 2.1f;
 float SLEEP_ADJ = 1.033f;  // Sleep adjustment for internal RTC drift correction (default: 62/60)
 
@@ -59,7 +64,7 @@ const char* LOG_FILE_1 = "/log.1.txt";
 const unsigned long MAX_LOG_SIZE = 100 * 1024; // 100KB
 
 // Time Validation
-const long long MIN_VALID_TIMESTAMP = 1704067200; // 2024-01-01 00:00:00 UTC
+// 時刻同期の完了は g_timeInitialized フラグで判定する
 
 // Vibration
 unsigned long VIBRA_STARTUP_MS = 500;
@@ -139,6 +144,9 @@ typedef struct {
 
 // --- Global Variables (Declarations only, definitions will remain in .ino) ---
 
+// BLE Server
+extern NimBLEServer* pBLEServer;
+
 // fastrec_alt
 
 RTC_DATA_ATTR bool LOG_AT_BOOT = false;
@@ -195,8 +203,48 @@ std::string g_lastBleCommand;
 // Sleep and Retry Logic
 RTC_DATA_ATTR int g_retryCount;
 RTC_DATA_ATTR time_t g_nextWakeupTime = 0;  // 0以外の場合は指定時刻に復帰
+RTC_DATA_ATTR bool g_timeInitialized = false;  // 時刻同期が完了したかどうか（setRtcToDefaultTimeではtrueにしない）
 
 // Function Prototypes ---
 bool createDefaultSettingIni();
+float getBatteryVoltage();
+uint8_t getBatteryBarSegments(float voltage);
+void updateBatteryVoltageTracking();
+
+// --- HID Settings ---
+#define HID_DEBOUNCE_DELAY_MS  20   // Switch debounce delay
+
+// HID Switch State
+enum HidSwitchState {
+    HID_STATE_IDLE,
+    HID_STATE_PRESS
+};
+
+// HID Switch Structure
+struct HidSwitch {
+    uint8_t gpio;
+    uint8_t pinState;
+    unsigned long lastDebounceTime;
+    HidSwitchState state;
+    uint16_t keyCode;
+};
+
+// HID Global Variables
+extern HidSwitch hidSwitches[];
+extern const int HID_SWITCH_COUNT;  // Automatically calculated from array size
+extern bool g_hidInitialized;
+
+// Wakeup Mode Detection
+extern bool g_isTimerWakeup;  // タイマー起動かどうか（true: タイマー, false: ボタン）
+extern RTC_DATA_ATTR bool g_timeInitialized;  // 時刻同期が完了したかどうか
+extern bool g_displayingKeyCode;   // Currently displaying HID key code
+extern uint16_t g_displayingKeyCodeValue;  // Currently displaying HID key code value
+extern unsigned long g_keyCodeDisplayEndTime;  // When to stop displaying key code
+
+// HID Function Prototypes
+void initHID();
+void processHidSwitches();
+void sendHidKeyPress(uint16_t keyCode);
+void sendHidKeyRelease(uint16_t keyCode);
 
 #endif // FASTREC_INO_H

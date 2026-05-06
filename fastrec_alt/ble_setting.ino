@@ -361,10 +361,6 @@ static std::string handle_get_info() {
   doc["txt_count"] = txt_count;
   doc["ini_count"] = ini_count;
 
-  float batteryLevel = ((g_currentBatteryVoltage - BAT_VOL_MIN) / 1.0f) * 100.0f;
-  if (batteryLevel < 0.0f) batteryLevel = 0.0f;
-  if (batteryLevel > 100.0f) batteryLevel = 100.0f;
-  doc["battery_level"] = batteryLevel;
   doc["battery_voltage"] = g_currentBatteryVoltage;
   doc["app_state"] = appStateStrings[g_currentAppState];
 
@@ -424,11 +420,15 @@ static std::string handle_set_time(const std::string& value) {
   std::string timestamp_str = value.substr(std::string("SET:time:").length());
   if (!timestamp_str.empty()) {
     long long timestamp_ll = atoll(timestamp_str.c_str());
-    if (timestamp_ll > MIN_VALID_TIMESTAMP) {  // Basic validation (after 2024-01-01)
+    // 2000年以降であることを簡易チェック
+    if (timestamp_ll >= 946684800) {  // 2000-01-01 00:00:00 UTC
       struct timeval tv;
-      tv.tv_sec = (time_t)timestamp_ll;  // atollからtime_tへのキャストを明確化
+      tv.tv_sec = (time_t)timestamp_ll;
       tv.tv_usec = 0;
       settimeofday(&tv, NULL);
+
+      // 時刻同期完了フラグを設定
+      g_timeInitialized = true;
 
       time_t now;
       struct tm timeinfo;
@@ -550,6 +550,9 @@ static void handle_cmd_reset_all() {
   ESP.restart();
 }
 
+// アプリの接続状態を管理する変数
+uint16_t g_appConnHandle = 0xFFFF;
+
 // --- BLE Callbacks ---
 class MyCallbacks : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {  // check_unused:ignore
@@ -571,6 +574,32 @@ class MyCallbacks : public NimBLECharacteristicCallbacks {
       applog("BLE Command Received: %s", value.c_str());
       g_lastBleCommand = value; // Store the last received command
       g_lastActivityTime = millis();  // コマンド受信もアクティビティ
+
+      // ボタン起動で録音ファイルがない場合、.wavファイル転送のみ拒否（タイマー起動は常に許可）
+      extern bool g_isTimerWakeup;
+      extern int g_audioFileCount;
+      if (!g_isTimerWakeup && g_audioFileCount == 0) {
+        // .wavファイル転送コマンドかチェック
+        if (value.rfind("GET:file:", 0) == 0) {
+          std::string fileRequest = value.substr(std::string("GET:file:").length());
+
+          // CHUNK_BURST_SIZE指定のフォーマットに対応（例: "GET:file:rec001.wav:8"）
+          size_t lastColonPos = fileRequest.rfind(':');
+          if (lastColonPos != std::string::npos) {
+            fileRequest = fileRequest.substr(0, lastColonPos);
+          }
+
+          // .wavファイルで終わるかチェック
+          if (fileRequest.length() >= 4 &&
+              fileRequest.substr(fileRequest.length() - 4) == ".wav") {
+            std::string noFileMessage = "ERROR: No audio files. Cannot transfer .wav files on button wakeup.";
+            pResponseCharacteristic->setValue(noFileMessage.c_str());
+            pResponseCharacteristic->notify();
+            applog(noFileMessage.c_str());
+            return;
+          }
+        }
+      }
 
       // SETUP状態でも設定関係のコマンドは許可する
       if (g_currentAppState != IDLE && g_currentAppState != SETUP) {
@@ -612,6 +641,19 @@ class MyCallbacks : public NimBLECharacteristicCallbacks {
       applog("Sent notification: %s", responseData.c_str());
     }
   }
+
+  // アプリが通知を購読したときに呼ばれる
+  void onSubscribe(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo, uint16_t subValue) override {
+    if (pCharacteristic->getUUID().toString() == RESPONSE_UUID) {
+      if (subValue > 0) {
+        g_appConnHandle = connInfo.getConnHandle();
+        applog("App subscribed to notifications (Handle: %d)", g_appConnHandle);
+      } else {
+        g_appConnHandle = 0xFFFF;
+        applog("App unsubscribed from notifications");
+      }
+    }
+  }
 };
 
 // Helper function to trim leading/trailing whitespace from a char array
@@ -640,9 +682,10 @@ void start_ble_server() {
 
   NimBLEDevice::init(DEVICE_NAME);
 
-  // --- Add BLE Security ---
-  NimBLEDevice::setSecurityAuth(true, true, true);
-  NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
+  // --- BLE Security ---
+  // ペアリング情報を永続化するためセキュリティを有効化
+  NimBLEDevice::setSecurityAuth(true, true, true);  // Bonding, MITM, Secure Connections
+  NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);  // 画面なしデバイス
   // --- End BLE Security ---
 
   NimBLEDevice::setDefaultPhy(2, 2);
@@ -656,6 +699,13 @@ void start_ble_server() {
 
     void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override {
       applog("Client Disconnected");
+      
+      // アプリが切断された場合、ハンドルをクリア
+      if (connInfo.getConnHandle() == g_appConnHandle) {
+        g_appConnHandle = 0xFFFF;
+        applog("App connection handle cleared.");
+      }
+
       // Only restart advertising if in a valid state
       if (g_currentAppState == IDLE || g_currentAppState == SETUP) {
         applog("Restarting advertising because state is appropriate.");
@@ -695,6 +745,7 @@ void start_ble_server() {
     NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY  // Allow client to read and receive notifications
   );
   pResponseCharacteristic->setValue("Ready for commands");  // Initial value
+  pResponseCharacteristic->setCallbacks(new MyCallbacks());
 
   // New ACK_UUID characteristic
   pAckCharacteristic = pService->createCharacteristic(
@@ -707,7 +758,16 @@ void start_ble_server() {
   // BLEアドバタイズ（広告）の準備
   NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
   pAdvertising->setName(DEVICE_NAME);          // Explicitly set advertising name
-  pAdvertising->addServiceUUID(SERVICE_UUID);  // Re-add service UUID
+
+  // Add custom service UUID to advertising
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+
+  // Add HID service UUID to advertising
+  // HID service UUID is 0x1812
+  pAdvertising->addServiceUUID(NimBLEUUID("1812"));
+  // Set appearance to HID Keyboard (0x03C1)
+  pAdvertising->setAppearance(0x03C1);
+
   pAdvertising->enableScanResponse(true);      // Enable scan response
 }
 
@@ -719,8 +779,11 @@ void stop_ble_advertising() {
 }
 
 void start_ble_advertising() {
-  if (!NimBLEDevice::getAdvertising()->isAdvertising() && isBLEConnected() == false) {
-    applog("Starting BLE advertising.");
+  // アプリ（GATTサービス）のハンドルが有効であれば、アプリが接続中とみなす
+  bool appConnected = (g_appConnHandle != 0xFFFF);
+
+  if (!NimBLEDevice::getAdvertising()->isAdvertising() && !appConnected) {
+    applog("Starting BLE advertising (App not connected).");
     NimBLEDevice::getAdvertising()->start();
   }
 }

@@ -35,6 +35,13 @@ const size_t NUM_VALID_TRANSITIONS = sizeof(validTransitions) / sizeof(validTran
 int g_serviceDisplayMode = 0;  // 0: 1234, 1: 1234, 2-8: 曜日記号確認 (日-土)
 const int NUM_SERVICE_MODES = 10;
 
+// HID key code display variables
+bool g_displayingKeyCode = false;  // Currently displaying HID key code
+uint16_t g_displayingKeyCodeValue = 0;  // Currently displaying HID key code value
+unsigned long g_keyCodeDisplayEndTime = 0;  // When to stop displaying key code
+
+bool g_isTimerWakeup = false;  // タイマー起動かどうか（true: タイマー, false: ボタン）
+
 void setAppState(AppState newState, bool applyDebounce=true, bool resetWakeupTime=true) {
   static unsigned long lastStateChangeTime = 0; // 状態変更のデバウンス用
 
@@ -98,12 +105,32 @@ void goDeepSleep() {
   // モーターを確実にOFF
   digitalWrite(MOTOR_GPIO, LOW);
 
-  // 録音開始や録音停止ボタンを押したらディープスリープ復帰するコード
-  esp_sleep_enable_ext1_wakeup_io(BUTTON_PIN_BITMASK(REC_BUTTON_GPIO) | BUTTON_PIN_BITMASK(AI_BUTTON_GPIO), ESP_EXT1_WAKEUP_ANY_HIGH);
-  rtc_gpio_pulldown_en(REC_BUTTON_GPIO);
-  rtc_gpio_pullup_dis(REC_BUTTON_GPIO);
-  rtc_gpio_pulldown_en(AI_BUTTON_GPIO);
-  rtc_gpio_pullup_dis(AI_BUTTON_GPIO);
+  // 録音開始や録音停止ボタン、HIDスイッチを押したらディープスリープ復帰するコード
+  // ESP32-S3ではRTC IOのみがext1 wakeupに使用可能（GPIO 0-21）
+  uint64_t wakeup_pin_mask = BUTTON_PIN_BITMASK(REC_BUTTON_GPIO) | BUTTON_PIN_BITMASK(AI_BUTTON_GPIO);
+  for (int i = 0; i < HID_SWITCH_COUNT; i++) {
+    // XIAO ESP32S3 (ESP32-S3): RTC IOs are GPIO 0-21. GPIO 39-42 are NOT RTC IOs.
+    if (hidSwitches[i].gpio <= 21) {
+      wakeup_pin_mask |= BUTTON_PIN_BITMASK(hidSwitches[i].gpio);
+    }
+  }
+
+  esp_sleep_enable_ext1_wakeup_io(wakeup_pin_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
+
+  // RTC GPIO設定（プルダウン有効化）
+  auto setup_rtc_pulldown = [](int gpio) {
+    if (gpio <= 21) {
+      rtc_gpio_init((gpio_num_t)gpio);
+      rtc_gpio_pulldown_en((gpio_num_t)gpio);
+      rtc_gpio_pullup_dis((gpio_num_t)gpio);
+    }
+  };
+
+  setup_rtc_pulldown(REC_BUTTON_GPIO);
+  setup_rtc_pulldown(AI_BUTTON_GPIO);
+  for (int i = 0; i < HID_SWITCH_COUNT; i++) {
+    setup_rtc_pulldown(hidSwitches[i].gpio);
+  }
 
   //esp_sleep_enable_ext1_wakeup_io(BUTTON_PIN_BITMASK(USB_DETECT_PIN), ESP_EXT1_WAKEUP_ANY_HIGH);
   //rtc_gpio_pulldown_en(USB_DETECT_PIN);
@@ -446,12 +473,16 @@ void handleIdle() {
     g_is_ai_recording = false;
     startRecording();
     return;
-  } else if (digitalRead(AI_BUTTON_GPIO) == HIGH) {
+  }
+
+  if (digitalRead(AI_BUTTON_GPIO) == HIGH) {
     setLcdBrightness(0xFF);
     g_is_ai_recording = true;
     startRecording();
     return;
   }
+
+  processHidSwitches(); // Process HID switches (HID_KEY1-6)
 
   // Go to deep sleep if idle for a while
   // g_retryCount == 0: 最初のタイムアウト (15秒)
@@ -530,6 +561,8 @@ void handleSetup() {
 
   start_ble_advertising();
 
+  processHidSwitches();
+
   if (millis() - lastDisplayUpdateTime > 200) {
     updateDisplay("");
     lastDisplayUpdateTime = millis();
@@ -574,6 +607,8 @@ void handleService() {
   static bool lastBothButtonState = false; // Previous both buttons state
   static unsigned long lastButtonChangeTime = 0;
 
+  processHidSwitches();
+
   // Update display
   if (millis() - lastDisplayUpdateTime > 200) {
     updateDisplay("");
@@ -617,6 +652,9 @@ void wakeupLogic() {
 
   g_enable_logging = true;
 
+  // 起動方法を記録（タイマーかボタンか）
+  g_isTimerWakeup = (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER);
+
   // タイマー復帰以外（ボタン押し、電源ON）の場合はリトライカウントとウェイクアップ時刻をリセット
   if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER) {
     g_retryCount = 0;
@@ -629,6 +667,8 @@ void wakeupLogic() {
   switch (wakeup_reason) {
     case ESP_SLEEP_WAKEUP_EXT1: {
       uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
+
+      // REC_BUTTON_GPIOでウェイクアップした場合
       if (wakeup_pin_mask & BUTTON_PIN_BITMASK(REC_BUTTON_GPIO)) {
         if (digitalRead(REC_BUTTON_GPIO) == HIGH) { // If button is currently pressed
             g_enable_logging = false;
@@ -637,15 +677,31 @@ void wakeupLogic() {
         } else {
             g_enable_logging = true;
         }
-      } else if (wakeup_pin_mask & BUTTON_PIN_BITMASK(AI_BUTTON_GPIO)) {
-        if (digitalRead(AI_BUTTON_GPIO) == HIGH) { // If button is currently pressed
-            g_enable_logging = false;
-            g_is_ai_recording = true;
-            startRecording();
+      }
+      // AI_BUTTON_GPIOでウェイクアップした場合
+      else if (wakeup_pin_mask & BUTTON_PIN_BITMASK(AI_BUTTON_GPIO)) {
+        applog("Wakeup by AI button - starting AI recording");
+        if (digitalRead(AI_BUTTON_GPIO) == HIGH) {
+          g_enable_logging = false;
+          g_is_ai_recording = true;
+          startRecording();
         } else {
-            g_enable_logging = true;
+          g_enable_logging = true;
         }
       }
+      // それ以外はHIDスイッチ（HID_KEY1-6）でウェイクアップした場合
+      else {
+        // hidSwitches配列をループして該当するGPIOを探す
+        for (int i = 0; i < HID_SWITCH_COUNT; i++) {
+          if (wakeup_pin_mask & BUTTON_PIN_BITMASK(hidSwitches[i].gpio)) {
+            applog("Wakeup by HID SW%d (GPIO%d, KeyCode=0x%04X)",
+                   i, hidSwitches[i].gpio, hidSwitches[i].keyCode);
+            g_enable_logging = true;
+            break;
+          }
+        }
+      }
+
       setLcdBrightness(0xFF); // ボタンでウェイクアップした場合はLCDを明るくする
       break;
     }
@@ -659,6 +715,18 @@ void wakeupLogic() {
       applog("wakeup_reason not clear: %d", wakeup_reason);
       break;
   }
+
+  // Reset HID switch states after wakeup (only if HID is initialized)
+  if (g_hidInitialized && wakeup_reason != 0) {
+    for (int i = 0; i < HID_SWITCH_COUNT; i++) {
+      hidSwitches[i].pinState = digitalRead(hidSwitches[i].gpio);
+      hidSwitches[i].state = HID_STATE_IDLE;
+      hidSwitches[i].lastDebounceTime = 0;
+      // Release each HID key
+      sendHidKeyRelease(hidSwitches[i].keyCode);
+    }
+    applog("HID switch states reset after wakeup");
+  }
 }
 
 void initPins() {
@@ -668,8 +736,11 @@ void initPins() {
   pinMode(REC_BUTTON_GPIO, INPUT_PULLDOWN);
   pinMode(AI_BUTTON_GPIO, INPUT_PULLDOWN);
   pinMode(MOTOR_GPIO, OUTPUT);
-  pinMode(USB_DETECT_PIN, INPUT);  // Initialize USB connect pin
 
+  // HIDスイッチのピン設定
+  for (int i = 0; i < HID_SWITCH_COUNT; i++) {
+    pinMode(hidSwitches[i].gpio, INPUT_PULLDOWN);
+  }
 }
 
 void initAdc() {
@@ -731,6 +802,8 @@ void setup() {
 
   start_ble_server();
   initAdc();
+
+  initHID();
 
   // Initialize voltage history buffer with current voltage
   float initialVoltage = getBatteryVoltage();

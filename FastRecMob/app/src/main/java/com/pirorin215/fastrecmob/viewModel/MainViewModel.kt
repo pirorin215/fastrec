@@ -121,6 +121,10 @@ class MainViewModel(
     fun updateSettings(updater: (com.pirorin215.fastrecmob.data.DeviceSettings) -> com.pirorin215.fastrecmob.data.DeviceSettings) = bleOrchestrator.updateSettings(updater)
     fun downloadFile(fileName: String) = bleOrchestrator.downloadFile(fileName)
     fun sendCommand(command: String) = bleOrchestrator.sendCommand(command)
+    fun saveLogsToFile(): String? {
+        return logManager.saveLogsToFile(application)
+    }
+
     fun clearLogs() = logManager.clearLogs()
     fun forceReconnectBle() = bleConnectionManager.forceReconnect()
     fun toggleSelection(fileName: String) = bleSelectionManager.toggleSelection(fileName)

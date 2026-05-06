@@ -230,22 +230,24 @@ class BleDeviceManager(
                     val bestResponse = deviceInfoResponses.maxByOrNull { it.batteryVoltage }
                     _deviceInfo.value = bestResponse
 
-                    // デバイス履歴に保存
-                    val locationResult = locationTracker.getCurrentLocation()
-                    val locationData = locationResult.getOrNull()
-                    val historyEntry = DeviceHistoryEntry(
-                        timestamp = System.currentTimeMillis(),
-                        latitude = locationData?.latitude,
-                        longitude = locationData?.longitude,
-                        batteryLevel = bestResponse!!.batteryLevel,
-                        batteryVoltage = bestResponse.batteryVoltage
-                    )
-                    deviceHistoryRepository.addEntry(historyEntry)
+                    // bestResponseはnullにならない（deviceInfoResponses.isNotEmpty()でチェック済み）
+                    bestResponse?.let { response ->
+                        // デバイス履歴に保存
+                        val locationResult = locationTracker.getCurrentLocation()
+                        val locationData = locationResult.getOrNull()
+                        val historyEntry = DeviceHistoryEntry(
+                            timestamp = System.currentTimeMillis(),
+                            latitude = locationData?.latitude,
+                            longitude = locationData?.longitude,
+                            batteryVoltage = response.batteryVoltage
+                        )
+                        deviceHistoryRepository.addEntry(historyEntry)
 
-                    // 低電圧チェックと通知
-                    notificationManager.checkAndNotifyLowVoltage(bestResponse.batteryVoltage)
+                        // 低電圧チェックと通知
+                        notificationManager.checkAndNotifyLowVoltage(response.batteryVoltage)
 
-                    logManager.addLog("最良の電圧を選択: ${bestResponse.batteryVoltage}V (${deviceInfoResponses.size}回の試行から)")
+                        logManager.addLog("最良の電圧を選択: ${response.batteryVoltage}V (${deviceInfoResponses.size}回の試行から)")
+                    }
                     true
                 } else {
                     logManager.addLog("全てのGET:info 試行が失敗しました")

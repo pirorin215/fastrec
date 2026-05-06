@@ -42,7 +42,7 @@ void drawCustomChar(uint8_t x, uint8_t y, uint8_t charIndex) {
 
 // Draw battery level bar at top-right (20x10 pixels)
 // Divided into 5 segments with 1px gaps between
-void drawBatteryBar(int batteryLevel) {
+void drawBatteryBar(uint8_t segmentsToFill) {
   const uint8_t barWidth = 20;
   const uint8_t barHeight = 8;
   const uint8_t barX = SSD1315_WIDTH - barWidth;  // Right side of display
@@ -53,9 +53,7 @@ void drawBatteryBar(int batteryLevel) {
   const uint8_t gapWidth = 1;
   const uint8_t numSegments = 5;
 
-  // Calculate how many segments to fill
-  // 0-9%: 0, 10-29%: 1, 30-49%: 2, 50-69%: 3, 70-89%: 4, 90-100%: 5
-  uint8_t segmentsToFill = (batteryLevel + 10) / 20;
+  // Constrain segments to valid range
   if (segmentsToFill > numSegments) segmentsToFill = numSegments;
 
   // Draw segments from right to left
@@ -106,10 +104,6 @@ void displayLine(uint8_t lineNumber, const char* text) {
 
 // Display top row: command/status, music icon, battery bar (shared by DEV and NORMAL modes)
 void displayTopRow() {
-  // Calculate Battery Level
-  int batteryLevel = (int)(((g_currentBatteryVoltage - BAT_VOL_MIN) / 1.0) * 100);
-  batteryLevel = constrain(batteryLevel, 0, 100);
-
   char line1[MAX_CHARS_PER_LINE + 1];
   int offset = 0;
 
@@ -125,6 +119,13 @@ void displayTopRow() {
     offset += snprintf(line1 + offset, sizeof(line1) - offset, "%s", appStateToDisplay);
   }
 
+#ifndef USE_HID_FOR_AI_BUTTON
+  // Show AI mode indicator if enabled and in REC state
+  if (g_currentAppState == REC && g_is_ai_recording && offset < sizeof(line1) - 4) {
+    offset += snprintf(line1 + offset, sizeof(line1) - offset, " AI:");
+  }
+#endif
+
   // Append '*' if audio files exist
   if (countAudioFiles() > 0 && offset < sizeof(line1) - 1) {
     snprintf(line1 + offset, sizeof(line1) - offset, "*");
@@ -133,7 +134,8 @@ void displayTopRow() {
   displayLine(0, line1);
 
   // Draw battery bar at top-right (special rendering)
-  drawBatteryBar(batteryLevel);
+  uint8_t batterySegments = getBatteryBarSegments(g_currentBatteryVoltage);
+  drawBatteryBar(batterySegments);
 }
 
 void displayStatus(const char* msg) {
@@ -274,6 +276,46 @@ void displayServiceMode() {
 }
 
 void updateDisplay(const char* msg) {
+  // Check if displaying HID key code
+  if (g_displayingKeyCode) {
+    if (millis() < g_keyCodeDisplayEndTime) {
+      display.clear();
+
+      // Display key code in decimal format
+      char keyCodeStr[8];
+      snprintf(keyCodeStr, sizeof(keyCodeStr), "%d", g_displayingKeyCodeValue);
+
+      // Calculate center position
+      // Screen is 72x40, font is 13x28
+      uint8_t numChars = strlen(keyCodeStr);
+      uint8_t totalWidth = numChars * FONT_WIDTH + (numChars - 1) * 2;  // 2px spacing
+      uint8_t startX = (72 - totalWidth) / 2;
+      uint8_t startY = (40 - FONT_HEIGHT) / 2;
+
+      // Draw each character
+      for (uint8_t i = 0; i < numChars; i++) {
+        char c = keyCodeStr[i];
+        uint8_t charIndex = 255;
+
+        // Convert character to font index
+        if (c >= '0' && c <= '9') {
+          charIndex = c - '0';
+        }
+
+        if (charIndex != 255) {
+          drawCustomChar(startX + i * (FONT_WIDTH + 2), startY, charIndex);
+        }
+      }
+
+      display.display();
+      return;  // Skip normal display
+    } else {
+      // Display time expired, return to normal display
+      g_displayingKeyCode = false;
+      g_displayingKeyCodeValue = 0;
+    }
+  }
+
   display.clear();
   switch (g_currentAppState) {
 

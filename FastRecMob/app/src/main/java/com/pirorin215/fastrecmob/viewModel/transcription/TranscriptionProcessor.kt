@@ -80,9 +80,11 @@ class TranscriptionProcessor(
         val provider = appSettingsRepository.getFlow(Settings.TRANSCRIPTION_PROVIDER).first()
         val currentService = serviceManager.getCurrentService(provider)
 
-        val locationData = currentForegroundLocationFlow.value ?: run {
-            logManager.addDebugLog("Foreground location not available, using low-power")
-            locationTracker.getLowPowerLocation().getOrNull()
+        val locationData = currentForegroundLocationFlow.value
+        if (locationData == null) {
+            logManager.addDebugLog("Foreground location not available, proceeding without location")
+        } else {
+            logManager.addDebugLog("Location: Lat=${locationData.latitude}, Lng=${locationData.longitude}")
         }
         if (locationData != null) {
             logManager.addDebugLog("Location: Lat=${locationData.latitude}, Lng=${locationData.longitude}")
@@ -238,6 +240,8 @@ class TranscriptionProcessor(
 
         // Only sync and emit completion for non-retryable errors
         if (status == "FAILED") {
+            // Send notification for failed transcription
+            notificationManager.sendTranscriptionNotification(displayMessage)
             // Immediately sync with Google Tasks after failure to create a task indicating error
             googleTasksIntegration.syncTranscriptionResultsWithGoogleTasks(audioDirNameFlow.value)
             // Notify that processing for this file is complete (even on failure)

@@ -120,8 +120,9 @@ void setRtcToDefaultTime() {
   defaultTime.tm_isdst = -1;          // Daylight Saving Time flag (-1 means unknown)
 
   time_t t = mktime(&defaultTime);
-  struct timeval now = { .tv_sec = t };
-  settimeofday(&now, NULL);
+  struct timeval tv = { .tv_sec = t };
+  settimeofday(&tv, NULL);
+  // 注意: ここでは g_timeInitialized = true にしない（デフォルト時刻設定のみ）
   applog("RTC set to default time.");
 }
 
@@ -143,7 +144,8 @@ void generateFilenameFromRTC(char* filenameBuffer, size_t bufferSize) {
 }
 
 bool isConnectUSB() {
-  return digitalRead(USB_DETECT_PIN) == HIGH;
+  // USB detection disabled (GPIO4 now used for HID Volume Up)
+  return false;
 }
 
 // Helper function to get time from internal RTC and check its validity.
@@ -225,6 +227,16 @@ float getBatteryVoltage() {
   int analogValue = analogRead(BATTERY_DIV_PIN);
   float voltage = analogValue * (3.3 / 4095.0); //(0-4095 maps to 0-3.3V with ADC_11db)
   return voltage * BAT_VOL_MULT; // Return raw voltage without updating global
+}
+
+// Calculate Battery Bar Segments directly from voltage (3.6V-4.05V -> 0-5 segments)
+uint8_t getBatteryBarSegments(float voltage) {
+  if (voltage < 3.6f) return 0;
+  if (voltage >= 4.05f) return 5;
+
+  // 3.6V - 4.05V の範囲で5セグメントに分割
+  // 各セグメントの境界: 3.6, 3.65, 3.75, 3.85, 3.95, 4.05
+  return (uint8_t)((voltage - 3.6f) / 0.09f);
 }
 
 void updateBatteryVoltageTracking() {

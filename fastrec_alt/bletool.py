@@ -281,7 +281,6 @@ async def get_device_info(verbose: bool = False, silent: bool = False):
             info = json.loads(response)
             if not silent:
                 print("\n")
-                print(f"{ 'バッテリーレベル'} : {int(info.get('battery_level', 0))} %")
                 print(f"{ 'バッテリー電圧'}   : {info.get('battery_voltage', 0.0):.2f} V")
                 print(f"{ 'アプリ状態'}       : {info.get('app_state', 'N/A')}")
 
