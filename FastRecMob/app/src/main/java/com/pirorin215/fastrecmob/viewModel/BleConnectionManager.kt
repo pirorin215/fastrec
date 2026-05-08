@@ -4,10 +4,12 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
 import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.pirorin215.fastrecmob.BleScanServiceManager
@@ -48,7 +50,8 @@ class BleConnectionManager(
     // Bluetooth状態変化を監視するBroadcastReceiver
     private val bluetoothStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+            val action = intent?.action
+            if (action == BluetoothAdapter.ACTION_STATE_CHANGED) {
                 val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
                 when (state) {
                     BluetoothAdapter.STATE_OFF -> {
@@ -69,6 +72,20 @@ class BleConnectionManager(
                         }
                     }
                 }
+            } else if (action == BluetoothDevice.ACTION_ACL_CONNECTED) {
+                val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                }
+                if (device != null && device.name?.equals(DEVICE_NAME, ignoreCase = true) == true) {
+                    logManager.addDebugLog("ACL_CONNECTED for $DEVICE_NAME detected")
+                    if (_connectionStateFlow.value is ConnectionState.Disconnected) {
+                        logManager.addDebugLog("Device connected via system (HID?), initiating GATT connection")
+                        connect(device)
+                    }
+                }
             }
         }
     }
@@ -83,7 +100,11 @@ class BleConnectionManager(
         logManager.addDebugLog("BleConnectionManager: Initialized with state=Disconnected")
 
         // Bluetooth状態変化を監視するBroadcastReceiverを登録
-        val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+        val filter = IntentFilter().apply {
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+            addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+            addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+        }
         context.registerReceiver(bluetoothStateReceiver, filter)
 
         // Collect connection state from the repository
@@ -177,6 +198,15 @@ class BleConnectionManager(
     fun restartScan(forceScan: Boolean = false) {
         if (!forceScan && _connectionStateFlow.value !is ConnectionState.Disconnected) {
             logManager.addDebugLog("Scan skipped: already connected")
+            return
+        }
+
+        // 0. Check if device is already connected via GATT (system-wide)
+        val connectedDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
+        val alreadyConnectedFastRec = connectedDevices.find { it.name?.equals(DEVICE_NAME, ignoreCase = true) == true }
+        if (alreadyConnectedFastRec != null) {
+            logManager.addDebugLog("Device already connected via system GATT, initiating connection")
+            connect(alreadyConnectedFastRec)
             return
         }
 
