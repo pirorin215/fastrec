@@ -745,7 +745,7 @@ void stop_ble_advertising() {
 }
 
 void start_ble_advertising() {
-  if (!NimBLEDevice::getAdvertising()->isAdvertising() && isBLEConnected() == false) {
+  if (!NimBLEDevice::getAdvertising()->isAdvertising()) {
     applog("Starting BLE advertising.");
     NimBLEDevice::getAdvertising()->start();
   }

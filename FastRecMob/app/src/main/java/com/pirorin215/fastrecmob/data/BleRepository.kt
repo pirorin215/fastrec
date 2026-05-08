@@ -242,7 +242,7 @@ class BleRepository(private val context: Context) {
 
     private fun connectGatt(device: BluetoothDevice) {
         Log.d(TAG, "Proceeding with GATT connection to ${device.address}")
-        bluetoothGatt = device.connectGatt(context, false, gattCallback)
+        bluetoothGatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
     }
 
     fun disconnect() {
